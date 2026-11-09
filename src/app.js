@@ -412,7 +412,12 @@ async function startUpgrade(){
     if(!(device && device.gatt.connected)){
       stage("重连");
       log("链路已断开，正在重连…","dim");
-      await gatt();
+      let ok=false;
+      for(let i=1;i<=12 && !ok;i++){
+        try{ await gatt(); ok=true; }
+        catch(e){ if(i%4===0) log(`    重连中(${i})…`,"dim"); await sleep(600); }
+      }
+      if(!ok) throw new Error("设备未连接，重连失败");
       hsReady=null;
       log("已重连设备","ok");
     }
