@@ -188,19 +188,19 @@ async function enterBoot(){
     }
   }
   if(!sent){ log("进 Boot 命令发送失败","err"); return null; }
-  await sleep(3200);
+  await sleep(2600);
   switching=true;
-  for(let i=1;i<=8;i++){
+  for(let i=1;i<=14;i++){
     try{
       try{ device.gatt.disconnect(); }catch(_){}
-      await sleep(800 + Math.min(i,4)*600);
+      await sleep(i<=2 ? 900 : 700);
       await gatt();
-      await sleep(500);
+      await sleep(300);
       frames.length=0;
-      const r=await request(T.HS, devInfo(target), T.HSR, 3000);
-      if(r){ switching=false; log("已进入 Boot 模式","ok"); return r; }
-    }catch(e){ log(`重连失败(${i})：${e.message}`,"dim"); }
-    await sleep(1500);
+      const r=await request(T.HS, devInfo(target), T.HSR, 2500);
+      if(r){ switching=false; log(`已进入 Boot 模式（第 ${i} 次尝试）`,"ok"); return r; }
+    }catch(e){ if(i%3===0) log(`重连失败(${i})：${e.message}`,"dim"); }
+    await sleep(600);
   }
   switching=false;
   return null;
@@ -363,7 +363,7 @@ async function waitReconnect(maxMs=30000){
       return m;
     }catch(e){
       if(n%5===0) log(`    等待设备重启…（${Math.round((performance.now()-t0)/1000)} s）`,"dim");
-      await sleep(1200);
+      await sleep(800);
     }
   }
   return null;
@@ -492,12 +492,12 @@ async function startUpgrade(){
     stage("写入并跳转");
     // 0x0501：升级期间蓝牙板可能主动断链，断了重连再发；单次只等 3 s，多发几次
     r = null;
-    for(let k=1;k<=20;k++){
+    for(let k=1;k<=30;k++){
       if(!(device && device.gatt.connected)){
         try{ await gatt(); log("    链路已断开，已重连","dim"); }
         catch(e){ await sleep(1000); continue; }
       }
-      r = await request(T.DONE, new Uint8Array(0), T.DONER, 3000);
+      r = await request(T.DONE, new Uint8Array(0), T.DONER, 1200);
       if(r) break;
       await sleep(500);
     }
@@ -519,7 +519,9 @@ async function startUpgrade(){
     }else{
       throw new Error("已派发但设备 30 s 内未回来，请断电重启确认");
     }
-    $("tAll").textContent=((performance.now()-t0)/1000).toFixed(1)+" s";
+    const __tot=((performance.now()-t0)/1000).toFixed(1);
+    $("tAll").textContent=__tot+" s";
+    log(`==== 总耗时 ${__tot} s（数据阶段 ${$("tData").textContent}）====`,"st");
   }catch(e){
     stage("失败");
     chip("失败","");
