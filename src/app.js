@@ -213,7 +213,7 @@ function enterBoot(){
   if(!sent){ log("进 Boot 命令发送失败","err"); return null; }
   await sleep(2600);
   switching=true;
-  for(let i=1;i<=14;i++){
+  for(let i=1;i<=22;i++){
     try{
       if(i>1) await sleep(i<=3 ? 500 : 700);
       await gatt();
