@@ -369,6 +369,14 @@ async function startUpgrade(){
 
   log(`目标 ${target} · 镜像 ${img.length} B`);
   try{
+    // 设备刚重启过，链路可能还没恢复：先确保连通，且不复用旧握手
+    if(!(device && device.gatt.connected)){
+      stage("重连");
+      log("链路已断开，正在重连…","dim");
+      await gatt();
+      hsReady=null;
+      log("已重连设备","ok");
+    }
     stage("握手");
     let r = null;
     if(hsReady && Date.now()-hsReady.t < 20000){ r = hsReady.r; hsReady=null; log("[1] 复用已完成的握手","st"); }
