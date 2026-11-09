@@ -304,14 +304,15 @@ async function startUpgrade(){
   $("btnStop").disabled=false;
   $("log").innerHTML="";
   const t0=performance.now();
-  const img=fw, pkt=231, total=Math.ceil(img.length/pkt), win=8, gap=4;
+  const img=fw, win=8, gap=4;
+  let pkt=231, total=0;
 
   $("sPct").textContent="0%"; $("bar").style.width="0%";
   $("sPkt").textContent=`0/${total}`; $("sSpd").textContent="0"; $("sRtx").textContent="0";
   $("tConn").textContent="--"; $("tHs").textContent="--"; $("tData").textContent="--"; $("tAll").textContent="--";
   chip("升级中","work");
 
-  log(`目标 ${target} · 镜像 ${img.length} B · 包 ${pkt} B × ${total}`);
+  log(`目标 ${target} · 镜像 ${img.length} B`);
   try{
     stage("握手");
     let r = null;
@@ -329,6 +330,15 @@ async function startUpgrade(){
     if(r[0]!==0) throw new Error("握手状态 0x"+r[0].toString(16));
     $("tHs").textContent=((performance.now()-t0)/1000).toFixed(1)+" s";
     log("[1] 握手成功","st");
+
+    // 设备会把包长向下 4 字节对齐（pkt & ~3），必须按对齐后的值分包
+    const devMax = r.length>=23 ? rd16(r,21) : 0;
+    let want = devMax ? Math.min(231, devMax) : 231;
+    pkt = want & ~3;
+    if(pkt<4) pkt=4;
+    total = Math.ceil(img.length/pkt);
+    log(`[1b] 分包 pkt=${pkt} B × ${total}（设备 maxpkt=${devMax||"?"}）`,"dim");
+    $("sPkt").textContent = `0/${total}`;
 
     stage("擦除暂存区");
     const sha=await sha256(img);
