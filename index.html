@@ -8,7 +8,7 @@
 <link rel="manifest" href="./manifest.webmanifest">
 <link rel="icon" type="image/svg+xml" href="./assets/icon.svg">
 <link rel="apple-touch-icon" href="./assets/icon-192.png">
-<link rel="stylesheet" href="./src/app.css?v=2">
+<link rel="stylesheet" href="./src/app.css?v=3">
 </head>
 <body>
 
@@ -64,7 +64,14 @@
   </div>
 
   <div class="card">
-    <div class="sec"><span class="n">3</span><h2>目标</h2><span class="tail" id="tailTarget">主控 M</span></div>
+    <div class="sec"><span class="n">3</span><h2>在线固件库</h2>
+      <span class="tail"><button id="btnLib" style="padding:4px 9px;font-size:11.5px">刷新</button></span></div>
+    <div class="lib" id="lib"><div class="hint">加载中…</div></div>
+    <div class="hint">固件放在仓库 <b>firmware/</b> 目录；新增后跑 <span style="font-family:var(--mono)">python tools/gen_index.py</span> 再 push。</div>
+  </div>
+
+  <div class="card">
+    <div class="sec"><span class="n">4</span><h2>目标</h2><span class="tail" id="tailTarget">主控 M</span></div>
     <div class="seg" id="seg">
       <button data-t="M" class="on">主控 M</button>
       <button data-t="S">蓝牙板 S</button>
@@ -73,7 +80,7 @@
   </div>
 
   <div class="card">
-    <div class="sec"><span class="n">4</span><h2>进度</h2><span class="tail" id="tailStage">待开始</span></div>
+    <div class="sec"><span class="n">5</span><h2>进度</h2><span class="tail" id="tailStage">待开始</span></div>
     <div class="bar"><i id="bar"></i></div>
     <div class="stats">
       <div class="stat"><b id="sPct">0%</b><span>进度</span></div>
@@ -90,12 +97,12 @@
   </div>
 
   <div class="card">
-    <div class="sec"><span class="n">5</span><h2>日志</h2><span class="tail"><button id="btnClr" style="padding:4px 9px;font-size:11.5px">清空</button></span></div>
+    <div class="sec"><span class="n">6</span><h2>日志</h2><span class="tail"><button id="btnClr" style="padding:4px 9px;font-size:11.5px">清空</button></span></div>
     <div class="log" id="log"></div>
   </div>
 
   <div class="card">
-    <div class="sec"><span class="n">6</span><h2>外观</h2></div>
+    <div class="sec"><span class="n">7</span><h2>外观</h2></div>
     <div class="themes" id="themes">
       <button data-th="olive"    style="background:#6b7d4f" title="卡其·军绿"></button>
       <button data-th="light"    style="background:#1f5eff" title="亮白·深蓝"></button>
@@ -119,6 +126,6 @@
   </div>
 </div>
 
-<script type="module" src="./src/app.js?v=2"></script>
+<script type="module" src="./src/app.js?v=3"></script>
 </body>
 </html>

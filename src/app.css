@@ -172,3 +172,16 @@ button.soft{background:transparent}
   .stats{grid-template-columns:repeat(2,1fr)}
   .hero .big{font-size:19px}
 }
+
+/* ---------- 在线固件库 ---------- */
+.lib{display:flex;flex-direction:column;gap:8px}
+.fw{display:flex;align-items:center;gap:9px;padding:10px 12px;border:1px solid var(--line);
+  border-radius:11px;background:var(--card2)}
+.fw .tag{font-size:10.5px;font-weight:800;padding:3px 7px;border-radius:6px;
+  background:var(--accent-soft);color:var(--accent);white-space:nowrap}
+.fw .nm{flex:1;min-width:0}
+.fw .nm b{display:block;font-size:12.5px;font-weight:650;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.fw .nm span{font-size:11px;color:var(--dim);font-family:var(--mono)}
+.fw button,.fw .dl{padding:7px 11px;font-size:12px;border-radius:9px}
+.fw .dl{display:inline-flex;align-items:center;text-decoration:none;color:var(--muted);
+  border:1px solid var(--line2);background:var(--card);font-weight:650}

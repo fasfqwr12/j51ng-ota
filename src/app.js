@@ -219,6 +219,51 @@ function refreshGo(){
   $("btnGo").disabled = running || !fw || !(device && device.gatt.connected);
 }
 
+
+/* ---------------- 在线固件库 ---------------- */
+async function loadLibrary(){
+  const box=$("lib");
+  box.innerHTML='<div class="hint">加载中…</div>';
+  try{
+    const res=await fetch("./firmware/index.json?t="+Date.now(),{cache:"no-store"});
+    if(!res.ok) throw new Error("HTTP "+res.status);
+    const data=await res.json();
+    const items=data.items||[];
+    if(!items.length){ box.innerHTML='<div class="hint">库为空</div>'; return; }
+    box.innerHTML=items.map((it,i)=>{
+      const kb=(it.size/1024).toFixed(1);
+      return `<div class="fw">
+        <span class="tag">${it.targetName}</span>
+        <div class="nm"><b>${it.title}</b><span>${kb} KB · ${it.sha256.slice(0,12)}…</span></div>
+        <a class="dl" href="./firmware/${encodeURIComponent(it.file)}" download>下载</a>
+        <button data-i="${i}">选用</button>
+      </div>`;
+    }).join("");
+    box.querySelectorAll("button[data-i]").forEach(b=>{
+      b.onclick=()=>useLibItem(items[+b.dataset.i], b);
+    });
+  }catch(e){
+    box.innerHTML=`<div class="hint">加载失败：${e.message}</div>`;
+  }
+}
+async function useLibItem(it, btn){
+  try{
+    if(btn){ btn.disabled=true; btn.textContent="下载中"; }
+    log(`在线库：下载 ${it.file} …`,"dim");
+    const res=await fetch("./firmware/"+encodeURIComponent(it.file));
+    if(!res.ok) throw new Error("HTTP "+res.status);
+    const buf=await res.arrayBuffer();
+    await loadFile(new File([buf], it.file));
+    const segBtn=[...$("seg").children].find(x=>x.dataset.t===it.target);
+    if(segBtn) segBtn.click();
+    log(`已选用 ${it.title}（${it.targetName}）`,"ok");
+  }catch(e){
+    log("下载失败："+e.message,"err");
+  }finally{
+    if(btn){ btn.disabled=false; btn.textContent="选用"; }
+  }
+}
+
 /* ---------------- 升级 ---------------- */
 async function startUpgrade(){
   if(!fw || running) return;
@@ -323,6 +368,8 @@ $("btnProbe").onclick=async()=>{ await probeMode(); refreshGo(); };
 $("btnGo").onclick=startUpgrade;
 $("btnStop").onclick=()=>{ abort=true; log("已请求中止…","dim"); };
 $("btnClr").onclick=()=>{ $("log").innerHTML=""; };
+$("btnLib").onclick=loadLibrary;
+loadLibrary();
 $("drop").onclick=()=>$("file").click();
 $("file").onchange=e=>{ const f=e.target.files[0]; if(f) loadFile(f); };
 $("drop").ondragover=e=>{ e.preventDefault(); $("drop").classList.add("has"); };
