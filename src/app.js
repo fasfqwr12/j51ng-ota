@@ -175,12 +175,19 @@ async function request(type,payload,waitType,ms){
 /* 让设备从 APP 进 Boot，成功后返回握手应答 */
 async function enterBoot(){
   log("发送进 Boot 命令 …","dim");
-  try{
-    if(chW.writeValueWithoutResponse) await chW.writeValueWithoutResponse(APP_ENTER_BOOT);
-    else await chW.writeValue(APP_ENTER_BOOT);
-  }catch(_){
-    try{ await chW.writeValue(APP_ENTER_BOOT); }catch(e){ log("进 Boot 命令发送失败："+e.message,"err"); return null; }
+  const w=async()=>{ if(chW.writeValueWithoutResponse) await chW.writeValueWithoutResponse(APP_ENTER_BOOT); else await chW.writeValue(APP_ENTER_BOOT); };
+  let sent=false;
+  for(let k=1;k<=4 && !sent;k++){
+    try{
+      // 设备重启后旧特征会失效，先确保链路和特征都是新的
+      if(!(device && device.gatt.connected) || !chW) await gatt();
+      await w(); sent=true;
+    }catch(e){
+      log(`进 Boot 命令写入失败(${k})：${e.message}`,"dim");
+      await sleep(1500);
+    }
   }
+  if(!sent){ log("进 Boot 命令发送失败","err"); return null; }
   await sleep(3200);
   switching=true;
   for(let i=1;i<=8;i++){
@@ -346,7 +353,10 @@ async function waitReconnect(maxMs=30000){
   while(performance.now()-t0<maxMs){
     n++;
     try{
-      if(!(device && device.gatt.connected)) await gatt();
+      // 必须先把残留链路踢掉，否则 Windows 会一直占着设备、新连接全失败
+      try{ device?.gatt?.disconnect(); }catch(_){}
+      await sleep(600);
+      await gatt();
       const m = await probeModeOnly();
       log(`    重连成功（第 ${n} 次尝试）`,"ok");
       setBadge(m);
