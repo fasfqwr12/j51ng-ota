@@ -92,8 +92,15 @@ let __gattLock=null;
 function gatt(){
   if(__gattLock) return __gattLock;
   __gattLock=(async()=>{
-  server = await device.gatt.connect();
-  const svc = await server.getPrimaryService(SVC);
+  server = device.gatt.connected ? device.gatt : await device.gatt.connect();
+  let svc;
+  try{
+    svc = await server.getPrimaryService(SVC);
+  }catch(e){
+    // 链路是陈旧的：踢一次，让下一次循环重新建立干净连接
+    try{ device.gatt.disconnect(); }catch(_){}
+    throw e;
+  }
   chW = await svc.getCharacteristic(CH_W);
   chN = await svc.getCharacteristic(CH_N);
   await chN.startNotifications();
@@ -208,8 +215,7 @@ function enterBoot(){
   switching=true;
   for(let i=1;i<=14;i++){
     try{
-      try{ device.gatt.disconnect(); }catch(_){}
-      await sleep(i<=2 ? 900 : 700);
+      if(i>1) await sleep(i<=3 ? 500 : 700);
       await gatt();
       await sleep(300);
       frames.length=0;
@@ -371,11 +377,9 @@ async function waitReconnect(maxMs=30000){
   while(performance.now()-t0<maxMs){
     n++;
     try{
-      // 必须先把残留链路踢掉，否则 Windows 会一直占着设备、新连接全失败
-      try{ device?.gatt?.disconnect(); }catch(_){}
-      await sleep(450);
+      // 只连不踢：反复 disconnect 会让 Chrome 的连接状态机卡死
       await gatt();
-      const m = await probeModeOnly(1000);
+      const m = await probeModeOnly(900);
       log(`    重连成功（第 ${n} 次尝试）`,"ok");
       setBadge(m);
       return m;
