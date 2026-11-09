@@ -8,7 +8,7 @@
 <link rel="manifest" href="./manifest.webmanifest">
 <link rel="icon" type="image/svg+xml" href="./assets/icon.svg">
 <link rel="apple-touch-icon" href="./assets/icon-192.png">
-<link rel="stylesheet" href="./src/app.css?v=1">
+<link rel="stylesheet" href="./src/app.css?v=2">
 </head>
 <body>
 
@@ -28,13 +28,13 @@
 <div class="wrap">
 
   <div class="card">
-    <div class="sec"><span class="n">1</span><h2>设备</h2><span class="tail" id="tailDev">—</span></div>
+    <div class="sec"><span class="n">1</span><h2>设备</h2><span class="tail" id="tailDev">待连接</span></div>
     <div class="hero">
       <div>
         <div class="big" id="hName">未连接</div>
         <div class="meta" id="hMeta">点击下方按钮连接蓝牙设备</div>
       </div>
-      <div class="badge" id="hBadge">—</div>
+      <div class="badge" id="hBadge" style="display:none">—</div>
     </div>
     <div class="row" style="margin-top:14px">
       <button class="primary" id="btnConn">连接蓝牙</button>
@@ -119,6 +119,6 @@
   </div>
 </div>
 
-<script type="module" src="./src/app.js?v=1"></script>
+<script type="module" src="./src/app.js?v=2"></script>
 </body>
 </html>

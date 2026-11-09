@@ -52,9 +52,10 @@ function chip(txt, cls){
 function stage(s){ $("tailStage").textContent=s; }
 function setBadge(mode){
   const b=$("hBadge");
-  if(mode==="boot"){ b.textContent="BOOT"; b.className="badge boot"; }
-  else if(mode==="app"){ b.textContent="APP"; b.className="badge app"; }
-  else { b.textContent="—"; b.className="badge"; }
+  b.style.display="inline-block";
+  if(mode==="boot"){ b.textContent="BOOT"; b.className="badge boot"; $("tailDev").textContent="Boot 模式"; }
+  else if(mode==="app"){ b.textContent="APP"; b.className="badge app"; $("tailDev").textContent="APP 模式"; }
+  else { b.style.display="none"; $("tailDev").textContent="待连接"; }
 }
 
 /* ---------------- BLE ---------------- */
