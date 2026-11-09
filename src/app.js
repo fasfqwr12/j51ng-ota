@@ -213,7 +213,7 @@ function enterBoot(){
   if(!sent){ log("进 Boot 命令发送失败","err"); return null; }
   await sleep(2600);
   switching=true;
-  for(let i=1;i<=22;i++){
+  for(let i=1;i<=30;i++){
     try{
       if(i>1) await sleep(i<=3 ? 500 : 700);
       await gatt();
@@ -221,7 +221,7 @@ function enterBoot(){
       frames.length=0;
       const r=await request(T.HS, devInfo(target), T.HSR, 1200);
       if(r){ switching=false; log(`已进入 Boot 模式（第 ${i} 次尝试）`,"ok"); return r; }
-    }catch(e){ if(i%3===0) log(`重连失败(${i})：${e.message}`,"dim"); }
+    }catch(e){ log(`重连失败(${i})：${e.message}`,"dim"); }
     await sleep(600);
   }
   switching=false;
