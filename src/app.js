@@ -549,6 +549,16 @@ async function startUpgrade(){
 
     $("bar").style.width="100%"; $("sPct").textContent="100%";
 
+    // 主控/雷达：副板固件没变，新 Boot 会原地待命、不断链，直接判成功
+    if(target !== "S"){
+      const tot=((performance.now()-t0)/1000).toFixed(1);
+      $("tAll").textContent=tot+" s";
+      log("[7] ✅ 升级成功：目标已升级，蓝牙板保持连接（无需重连）","st");
+      chip("升级成功","on"); stage("升级成功");
+      log(`==== 总耗时 ${tot} s（数据阶段 ${$("tData").textContent}）====`,"st");
+      return;
+    }
+
     stage("等待设备重启");
     log("[6] 设备复位中，等待重新连接…","dim");
     const mode = await waitReconnect(30000);
