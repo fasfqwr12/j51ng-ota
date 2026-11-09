@@ -117,7 +117,19 @@ async function writeFrame(f){
   if(chW.writeValueWithoutResponse) await chW.writeValueWithoutResponse(f);
   else await chW.writeValue(f);
 }
-async function writeCtrl(f){ await chW.writeValueWithResponse(f); }
+async function writeCtrl(f){
+  // 本设备写特征不保证支持"带响应写"（Chrome 会报 NotSupportedError），
+  // 优先用无响应写，失败再退回带响应写。
+  try{
+    if(chW.writeValueWithoutResponse) return await chW.writeValueWithoutResponse(f);
+    return await chW.writeValueWithResponse(f);
+  }catch(e){
+    if(/not permitted|not supported/i.test(e.message||"")){
+      return await chW.writeValueWithResponse(f);
+    }
+    throw e;
+  }
+}
 
 /* 数据包写：Chrome 对同一特征不允许并发，遇到 in progress 就等几毫秒重试 */
 async function writeData(f){
