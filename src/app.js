@@ -342,9 +342,9 @@ async function useLibItem(it, btn){
 /* ---------------- 升级 ---------------- */
 
 /* 只读模式判断：握手有应答=Boot，无应答=APP（不主动切 Boot） */
-async function probeModeOnly(){
+async function probeModeOnly(timeout=2000){
   frames.length=0;
-  const r = await request(T.HS, devInfo(target), T.HSR, 2000);
+  const r = await request(T.HS, devInfo(target), T.HSR, timeout);
   return r ? "boot" : "app";
 }
 /* 设备复位后自动重连：每 1.2 s 试一次，直到回来或超时 */
@@ -355,9 +355,9 @@ async function waitReconnect(maxMs=30000){
     try{
       // 必须先把残留链路踢掉，否则 Windows 会一直占着设备、新连接全失败
       try{ device?.gatt?.disconnect(); }catch(_){}
-      await sleep(600);
+      await sleep(450);
       await gatt();
-      const m = await probeModeOnly();
+      const m = await probeModeOnly(1000);
       log(`    重连成功（第 ${n} 次尝试）`,"ok");
       setBadge(m);
       return m;
