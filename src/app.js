@@ -13,6 +13,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 let device=null, server=null, chW=null, chN=null;
 let frames=[], running=false, abort=false, target="M", fw=null;
+let hsReady=null;   // {r, t}：已握手但还没发参数，20 秒内可直接复用
 
 /* ---------------- 帧工具 ---------------- */
 function crc8(d){
@@ -133,6 +134,32 @@ async function request(type,payload,waitType,ms){
   return waitFrame(waitType,ms);
 }
 
+
+/* 让设备从 APP 进 Boot，成功后返回握手应答 */
+async function enterBoot(){
+  log("发送进 Boot 命令 …","dim");
+  try{
+    if(chW.writeValueWithoutResponse) await chW.writeValueWithoutResponse(APP_ENTER_BOOT);
+    else await chW.writeValue(APP_ENTER_BOOT);
+  }catch(_){
+    try{ await chW.writeValue(APP_ENTER_BOOT); }catch(e){ log("进 Boot 命令发送失败："+e.message,"err"); return null; }
+  }
+  await sleep(3200);
+  for(let i=1;i<=4;i++){
+    try{
+      try{ device.gatt.disconnect(); }catch(_){}
+      await sleep(1000);
+      await gatt();
+      await sleep(500);
+      frames.length=0;
+      const r=await request(T.HS, devInfo(target), T.HSR, 3000);
+      if(r){ log("已进入 Boot 模式","ok"); return r; }
+    }catch(e){ log(`重连失败(${i})：${e.message}`,"dim"); }
+    await sleep(1200);
+  }
+  return null;
+}
+
 /* ---------------- 模式识别 ---------------- */
 async function probeMode(){
   frames.length=0;
@@ -144,32 +171,24 @@ async function probeMode(){
     $("kVer").textContent = r.length>=21 ? [...r.slice(17,21)].map(b=>b.toString(16).padStart(2,"0")).join(".") : "—";
     $("hMeta").textContent = "Boot 模式，可直接升级";
     log("模式：Boot（握手有应答）","ok");
+    hsReady = {r, t: Date.now()};
     return "boot";
   }
   setBadge("app");
   $("hMeta").textContent = "APP 模式，正在切换进 Boot…";
-  log("模式：APP（握手无应答）→ 发送进 Boot","dim");
-  try{
-    if(chW.writeValueWithoutResponse) await chW.writeValueWithoutResponse(APP_ENTER_BOOT);
-    else await chW.writeValue(APP_ENTER_BOOT);
-  }catch(_){ await chW.writeValue(APP_ENTER_BOOT); }
-  log("命令已发送，等待设备复位…","dim");
-  await sleep(3500);
-  try{ device.gatt.disconnect(); }catch(_){}
-  await sleep(1500);
-  try{
-    await gatt(); await sleep(700);
-    frames.length=0;
-    r = await request(T.HS, devInfo(target), T.HSR, 3000);
-    if(r){
-      setBadge("boot");
-      $("hMeta").textContent="已进入 Boot 模式";
-      log("已进入 Boot 模式","ok");
-      return "boot";
-    }
-  }catch(e){ log("重连失败："+e.message,"err"); }
-  $("hMeta").textContent="仍未进入 Boot，请重试";
-  log("仍未进入 Boot","err");
+  log("模式：APP（握手无应答）","dim");
+  r = await enterBoot();
+  if(r){
+    setBadge("boot");
+    const hw=new TextDecoder().decode(r.slice(1,17)).replace(/[\uFFFD\x00]/g,"");
+    $("kHw").textContent = hw || "—";
+    $("kVer").textContent = r.length>=21 ? [...r.slice(17,21)].map(b=>b.toString(16).padStart(2,"0")).join(".") : "—";
+    $("hMeta").textContent = "已进入 Boot 模式";
+    hsReady = {r, t: Date.now()};
+    return "boot";
+  }
+  $("hMeta").textContent = "切换 Boot 失败，请重试";
+  log("未能进入 Boot","err");
   return "app";
 }
 
@@ -291,8 +310,18 @@ async function startUpgrade(){
   log(`目标 ${target} · 镜像 ${img.length} B · 包 ${pkt} B × ${total}`);
   try{
     stage("握手");
-    let r = await request(T.HS, devInfo(target), T.HSR, 5000);
-    if(!r) throw new Error("握手无应答（设备不在 Boot）");
+    let r = null;
+    if(hsReady && Date.now()-hsReady.t < 20000){ r = hsReady.r; hsReady=null; log("[1] 复用已完成的握手","st"); }
+    if(!r){
+      r = await request(T.HS, devInfo(target), T.HSR, 4000);
+      if(!r){
+        log("握手无应答 → 设备在 APP，自动切 Boot 后重试","dim");
+        stage("切换 Boot");
+        r = await enterBoot();
+        if(!r) throw new Error("握手无应答，且自动切 Boot 失败");
+        setBadge("boot");
+      }
+    }
     if(r[0]!==0) throw new Error("握手状态 0x"+r[0].toString(16));
     $("tHs").textContent=((performance.now()-t0)/1000).toFixed(1)+" s";
     log("[1] 握手成功","st");
@@ -367,7 +396,7 @@ async function startUpgrade(){
     chip("失败","");
     log("!! "+e.message,"err");
   }finally{
-    running=false; $("btnStop").disabled=true; refreshGo();
+    running=false; $("btnStop").disabled=true; hsReady=null; refreshGo();
   }
 }
 
