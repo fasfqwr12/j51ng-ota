@@ -83,6 +83,9 @@ async function connect(){
   }catch(e){
     chip("未连接","");
     log("连接失败："+e.message,"err");
+    // 失败也要释放链路，否则设备一直被占用、不再广播
+    try{ device?.gatt?.disconnect(); }catch(_){}
+    device=null;
   }
 }
 async function gatt(){
