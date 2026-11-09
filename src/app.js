@@ -88,7 +88,10 @@ async function connect(){
     device=null;
   }
 }
-async function gatt(){
+let __gattLock=null;
+function gatt(){
+  if(__gattLock) return __gattLock;
+  __gattLock=(async()=>{
   server = await device.gatt.connect();
   const svc = await server.getPrimaryService(SVC);
   chW = await svc.getCharacteristic(CH_W);
@@ -109,6 +112,8 @@ async function gatt(){
       i++;
     }
   });
+  })().finally(()=>{ __gattLock=null; });
+  return __gattLock;
 }
 function onDisconnect(){
   if(switching){ chip("切换中…","work"); return; }
@@ -181,7 +186,10 @@ async function request(type,payload,waitType,ms){
 
 
 /* 让设备从 APP 进 Boot，成功后返回握手应答 */
-async function enterBoot(){
+let __bootLock=null;
+function enterBoot(){
+  if(__bootLock) return __bootLock;
+  __bootLock=(async()=>{
   log("发送进 Boot 命令 …","dim");
   const w=async()=>{ if(chW.writeValueWithoutResponse) await chW.writeValueWithoutResponse(APP_ENTER_BOOT); else await chW.writeValue(APP_ENTER_BOOT); };
   let sent=false;
@@ -212,6 +220,8 @@ async function enterBoot(){
   }
   switching=false;
   return null;
+  })().finally(()=>{ __bootLock=null; });
+  return __bootLock;
 }
 
 /* ---------------- 模式识别 ---------------- */
