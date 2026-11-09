@@ -3,6 +3,7 @@
   "items": [
     {
       "file": "M_9501-000-02166_v1.hex",
+      "role": "app",
       "target": "M",
       "targetName": "主控 M",
       "title": "M_9501-000-02166_v1",
@@ -14,6 +15,7 @@
     },
     {
       "file": "S_app_9501-000-02150.hex",
+      "role": "app",
       "target": "S",
       "targetName": "蓝牙板 S",
       "title": "S_app_9501-000-02150",
@@ -25,6 +27,7 @@
     },
     {
       "file": "S_boot_rdts.hex",
+      "role": "boot",
       "target": "S",
       "targetName": "蓝牙板 S",
       "title": "S_boot_rdts",

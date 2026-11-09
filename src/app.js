@@ -230,17 +230,27 @@ async function loadLibrary(){
     const data=await res.json();
     const items=data.items||[];
     if(!items.length){ box.innerHTML='<div class="hint">库为空</div>'; return; }
-    box.innerHTML=items.map((it,i)=>{
+    const ota=items.filter(it=>it.role!=="boot");
+    const boot=items.filter(it=>it.role==="boot");
+    const row=(it,i,canOta)=>{
       const kb=(it.size/1024).toFixed(1);
-      return `<div class="fw">
+      const tail = canOta
+        ? `<button data-i="${i}">选用</button>`
+        : `<span class="tag swd">仅 SWD</span>`;
+      return `<div class="fw${canOta?"":" noota"}">
         <span class="tag">${it.targetName}</span>
         <div class="nm"><b>${it.title}</b><span>${kb} KB · ${it.sha256.slice(0,12)}…</span></div>
         <a class="dl" href="./firmware/${encodeURIComponent(it.file)}" download>下载</a>
-        <button data-i="${i}">选用</button>
+        ${tail}
       </div>`;
-    }).join("");
+    };
+    box.innerHTML =
+      `<div class="hint" style="margin:0 0 2px">可 OTA 升级（APP）</div>` +
+      ota.map((it,i)=>row(it,i,true)).join("") +
+      (boot.length ? `<div class="hint" style="margin:10px 0 2px">Boot 固件 · 只能 SWD 烧录，不能 OTA</div>`
+                    + boot.map(it=>row(it,0,false)).join("") : "");
     box.querySelectorAll("button[data-i]").forEach(b=>{
-      b.onclick=()=>useLibItem(items[+b.dataset.i], b);
+      b.onclick=()=>useLibItem(ota[+b.dataset.i], b);
     });
   }catch(e){
     box.innerHTML=`<div class="hint">加载失败：${e.message}</div>`;

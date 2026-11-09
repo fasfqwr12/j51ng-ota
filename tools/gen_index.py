@@ -59,8 +59,10 @@ def main():
         sha = hashlib.sha256(raw).hexdigest()
         img = hex_image_size(path) if fn.lower().endswith(".hex") else len(raw)
         m = re.search(r"v(\d+)", fn)
+        role = "boot" if "boot" in fn.lower() else "app"
         items.append({
             "file": fn,
+            "role": role,
             "target": target,
             "targetName": TARGET_NAME.get(target, target),
             "title": os.path.splitext(fn)[0],
