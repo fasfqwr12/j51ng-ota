@@ -354,14 +354,20 @@ async function startUpgrade(){
     let sent=0, acked=0, rtx=0, stale=0;
     while(acked<total){
       if(abort) throw new Error("已中止");
+      const inflight=[];
       while(sent<total && sent-acked<win){
         const chunk=img.slice(sent*pkt,(sent+1)*pkt);
         const body=new Uint8Array(6+chunk.length);
         body.set(u16(sent),0); body.set(u16(total),2); body.set(u16(chunk.length),4);
         body.set(chunk,6);
-        await writeFrame(makeFrame(T.DT, body));
+        inflight.push(writeFrame(makeFrame(T.DT, body)));   // 不逐包等，交给控制器排队
         sent++;
         if(gap) await sleep(gap);
+      }
+      if(inflight.length){
+        const res=await Promise.allSettled(inflight);
+        const bad=res.find(x=>x.status==="rejected");
+        if(bad) throw new Error("写入失败："+bad.reason.message);
       }
       const deadline=Date.now()+1000;
       let moved=false;
