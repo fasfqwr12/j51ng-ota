@@ -327,6 +327,32 @@ async function useLibItem(it, btn){
 }
 
 /* ---------------- 升级 ---------------- */
+
+/* 只读模式判断：握手有应答=Boot，无应答=APP（不主动切 Boot） */
+async function probeModeOnly(){
+  frames.length=0;
+  const r = await request(T.HS, devInfo(target), T.HSR, 2000);
+  return r ? "boot" : "app";
+}
+/* 设备复位后自动重连：每 1.2 s 试一次，直到回来或超时 */
+async function waitReconnect(maxMs=30000){
+  const t0=performance.now(); let n=0;
+  while(performance.now()-t0<maxMs){
+    n++;
+    try{
+      if(!(device && device.gatt.connected)) await gatt();
+      const m = await probeModeOnly();
+      log(`    重连成功（第 ${n} 次尝试）`,"ok");
+      setBadge(m);
+      return m;
+    }catch(e){
+      if(n%5===0) log(`    等待设备重启…（${Math.round((performance.now()-t0)/1000)} s）`,"dim");
+      await sleep(1200);
+    }
+  }
+  return null;
+}
+
 async function startUpgrade(){
   if(!fw || running) return;
   running=true; abort=false; refreshGo();
@@ -446,10 +472,21 @@ async function startUpgrade(){
     if(r[0]!==0) throw new Error("设备报错 0x"+r[0].toString(16));
 
     $("bar").style.width="100%"; $("sPct").textContent="100%";
+    log("[5] 设备已确认接管（0x0502=0x00），即将复位","st");
+
+    stage("等待设备重启");
+    const mode = await waitReconnect(30000);
+    if(mode==="app"){
+      log("[6] 设备已重启，运行新 APP","ok");
+      chip("升级成功","on");
+      stage("升级成功");
+    }else if(mode==="boot"){
+      log("[6] 设备已重启，但仍停在 Boot（派发未跳转）","err");
+      chip("需重试",""); stage("需重试");
+    }else{
+      throw new Error("已派发但设备 30 s 内未回来，请断电重启确认");
+    }
     $("tAll").textContent=((performance.now()-t0)/1000).toFixed(1)+" s";
-    stage("升级成功");
-    chip("升级成功","on");
-    log("[5] 升级成功，设备即将复位","ok");
   }catch(e){
     stage("失败");
     chip("失败","");
