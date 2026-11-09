@@ -197,7 +197,7 @@ async function enterBoot(){
       await gatt();
       await sleep(300);
       frames.length=0;
-      const r=await request(T.HS, devInfo(target), T.HSR, 2500);
+      const r=await request(T.HS, devInfo(target), T.HSR, 1200);
       if(r){ switching=false; log(`已进入 Boot 模式（第 ${i} 次尝试）`,"ok"); return r; }
     }catch(e){ if(i%3===0) log(`重连失败(${i})：${e.message}`,"dim"); }
     await sleep(600);
