@@ -1,0 +1,11 @@
+{
+  "name": "J51NG OTA",
+  "short_name": "J51NG OTA",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#f0efe6",
+  "theme_color": "#6b7d4f",
+  "icons": [
+    { "src": "./assets/icon.svg", "sizes": "any", "type": "image/svg+xml" }
+  ]
+}

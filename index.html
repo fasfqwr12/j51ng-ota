@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="olive">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#f0efe6">
+<title>J51NG OTA · 浏览器升级上位机</title>
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="icon" type="image/svg+xml" href="./assets/icon.svg">
+<link rel="apple-touch-icon" href="./assets/icon-192.png">
+<link rel="stylesheet" href="./src/app.css?v=1">
+</head>
+<body>
+
+<div class="topbar">
+  <div class="inner">
+    <div class="brand">
+      <div class="mark">J5</div>
+      <div style="min-width:0">
+        <h1>J51NG OTA</h1>
+        <div class="sub">浏览器直连 · Web Bluetooth</div>
+      </div>
+    </div>
+    <div class="chip" id="chip"><span class="dot"></span><span id="chipTxt">未连接</span></div>
+  </div>
+</div>
+
+<div class="wrap">
+
+  <div class="card">
+    <div class="sec"><span class="n">1</span><h2>设备</h2><span class="tail" id="tailDev">—</span></div>
+    <div class="hero">
+      <div>
+        <div class="big" id="hName">未连接</div>
+        <div class="meta" id="hMeta">点击下方按钮连接蓝牙设备</div>
+      </div>
+      <div class="badge" id="hBadge">—</div>
+    </div>
+    <div class="row" style="margin-top:14px">
+      <button class="primary" id="btnConn">连接蓝牙</button>
+      <button id="btnDisc" disabled>断开</button>
+      <button id="btnProbe" disabled>读状态</button>
+    </div>
+    <dl class="kv">
+      <dt>硬件码</dt><dd id="kHw">—</dd>
+      <dt>Boot 版本</dt><dd id="kVer">—</dd>
+      <dt>设备地址</dt><dd id="kId">—</dd>
+    </dl>
+    <div class="hint">设备在 APP 模式时会自动发送进 Boot 命令，无需手动切换。</div>
+  </div>
+
+  <div class="card">
+    <div class="sec"><span class="n">2</span><h2>固件</h2><span class="tail" id="tailFw">未选择</span></div>
+    <div class="drop" id="drop">
+      <div class="t">点击选择或拖入固件</div>
+      <div class="h">支持 .bin / .hex，HEX 自动解析基址</div>
+    </div>
+    <dl class="kv">
+      <dt>文件</dt><dd id="kFile">—</dd>
+      <dt>大小</dt><dd id="kSize">—</dd>
+      <dt>SHA-256</dt><dd id="kSha" style="font-size:11px">—</dd>
+    </dl>
+    <input type="file" id="file" accept=".bin,.hex" hidden>
+  </div>
+
+  <div class="card">
+    <div class="sec"><span class="n">3</span><h2>目标</h2><span class="tail" id="tailTarget">主控 M</span></div>
+    <div class="seg" id="seg">
+      <button data-t="M" class="on">主控 M</button>
+      <button data-t="S">蓝牙板 S</button>
+      <button data-t="R">雷达 R</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="sec"><span class="n">4</span><h2>进度</h2><span class="tail" id="tailStage">待开始</span></div>
+    <div class="bar"><i id="bar"></i></div>
+    <div class="stats">
+      <div class="stat"><b id="sPct">0%</b><span>进度</span></div>
+      <div class="stat"><b id="sSpd">0</b><span>B/s</span></div>
+      <div class="stat"><b id="sPkt">0/0</b><span>包</span></div>
+      <div class="stat"><b id="sRtx">0</b><span>重传</span></div>
+    </div>
+    <div class="stats times">
+      <div class="stat"><b id="tConn">--</b><span>连接</span></div>
+      <div class="stat"><b id="tHs">--</b><span>握手</span></div>
+      <div class="stat"><b id="tData">--</b><span>数据</span></div>
+      <div class="stat"><b id="tAll">--</b><span>合计</span></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="sec"><span class="n">5</span><h2>日志</h2><span class="tail"><button id="btnClr" style="padding:4px 9px;font-size:11.5px">清空</button></span></div>
+    <div class="log" id="log"></div>
+  </div>
+
+  <div class="card">
+    <div class="sec"><span class="n">6</span><h2>外观</h2></div>
+    <div class="themes" id="themes">
+      <button data-th="olive"    style="background:#6b7d4f" title="卡其·军绿"></button>
+      <button data-th="light"    style="background:#1f5eff" title="亮白·深蓝"></button>
+      <button data-th="graphite" style="background:#20242c" title="亮白·石墨"></button>
+      <button data-th="teal"     style="background:#0d9488" title="浅灰·青绿"></button>
+      <button data-th="warm"     style="background:#e8662c" title="米白·猎橙"></button>
+      <button data-th="night"    style="background:#63c95f" title="夜视绿"></button>
+    </div>
+    <div class="note" style="margin-top:12px">
+      手机使用需要 <b>HTTPS</b> 页面（就是现在这个 GitHub Pages 地址）。安卓 Chrome / Edge 可用，iOS Safari 不支持 Web Bluetooth。
+    </div>
+  </div>
+
+  <div style="height:8px"></div>
+</div>
+
+<div class="dock">
+  <div class="inner">
+    <button class="primary" id="btnGo" disabled>开始升级</button>
+    <button class="ghost" id="btnStop" disabled>中止</button>
+  </div>
+</div>
+
+<script type="module" src="./src/app.js?v=1"></script>
+</body>
+</html>
