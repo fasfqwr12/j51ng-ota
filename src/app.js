@@ -15,7 +15,8 @@ let device=null, server=null, chW=null, chN=null;
 let frames=[], running=false, abort=false, target="M", fw=null;
 let hsReady=null;
 let switching=false;
-let writeChain=Promise.resolve();   // 正在主动断开切 Boot，别报错   // {r, t}：已握手但还没发参数，20 秒内可直接复用
+let writeChain=Promise.resolve();
+const TUNE = { win:8, gap:4 };   // 正在主动断开切 Boot，别报错   // {r, t}：已握手但还没发参数，20 秒内可直接复用
 
 /* ---------------- 帧工具 ---------------- */
 function crc8(d){
@@ -133,10 +134,12 @@ async function writeCtrl(f){
 
 /* 数据包写：Chrome 对同一特征不允许并发，遇到 in progress 就等几毫秒重试 */
 async function writeData(f){
+  const __t0=performance.now();
   for(let i=0;i<4;i++){
     try{
       if(chW.writeValueWithoutResponse) await chW.writeValueWithoutResponse(f);
       else await chW.writeValue(f);
+      if(window.__perf) window.__perf.wr.push(performance.now()-__t0);
       return;
     }catch(e){
       if(/in progress/i.test(e.message||"")){ await sleep(6+ i*4); continue; }
@@ -359,7 +362,7 @@ async function startUpgrade(){
   $("btnStop").disabled=false;
   $("log").innerHTML="";
   const t0=performance.now();
-  const img=fw, win=8, gap=4;
+  const img=fw, win=TUNE.win, gap=TUNE.gap;
   let pkt=231, total=0;
 
   $("sPct").textContent="0%"; $("bar").style.width="0%";
@@ -367,7 +370,8 @@ async function startUpgrade(){
   $("tConn").textContent="--"; $("tHs").textContent="--"; $("tData").textContent="--"; $("tAll").textContent="--";
   chip("升级中","work");
 
-  log(`目标 ${target} · 镜像 ${img.length} B`);
+  window.__perf={wr:[],rounds:[]};
+  log(`目标 ${target} · 镜像 ${img.length} B · win=${TUNE.win} gap=${TUNE.gap}`);
   try{
     // 设备刚重启过，链路可能还没恢复：先确保连通，且不复用旧握手
     if(!(device && device.gatt.connected)){
@@ -417,6 +421,7 @@ async function startUpgrade(){
     let sent=0, acked=0, rtx=0, stale=0;
     while(acked<total){
       if(abort) throw new Error("已中止");
+      const r0=Date.now();
       while(sent<total && sent-acked<win){
         const chunk=img.slice(sent*pkt,(sent+1)*pkt);
         const body=new Uint8Array(6+chunk.length);
@@ -437,6 +442,7 @@ async function startUpgrade(){
         if(f.t===T.ACK && code===0 && seq+1<=sent && seq+1>acked){ acked=seq+1; moved=true; }
         else if(f.t===T.NACK){ rtx++; acked=Math.min(acked,seq); moved=true; }
       }
+      if(window.__perf) window.__perf.rounds.push({dt:Date.now()-r0, acked, sent, moved});
       if(!moved && acked<sent){
         if(frames.length>50) frames.length=0;
         stale++;
@@ -586,6 +592,17 @@ window.ota = {
     return true;
   },
   setTarget(t){ const b=[...$("seg").children].find(x=>x.dataset.t===t); if(b) b.click(); return t; },
+  tune(win,gap){ if(win) TUNE.win=win; if(gap!==undefined) TUNE.gap=gap; return {...TUNE}; },
+  perf(){
+    const p=window.__perf||{wr:[],rounds:[]};
+    const s=[...p.wr].sort((a,b)=>a-b);
+    const q=f=>s.length?+s[Math.min(s.length-1,Math.floor(s.length*f))].toFixed(1):null;
+    const rd=p.rounds.filter(r=>r.moved);
+    return { writes:s.length, wrAvg:s.length?+(s.reduce((a,b)=>a+b,0)/s.length).toFixed(1):null,
+      wrP50:q(0.5), wrP90:q(0.9), wrMax:s.length?+s[s.length-1].toFixed(1):null,
+      rounds:p.rounds.length, movedRounds:rd.length,
+      ackAvg: rd.length?+(rd.reduce((a,b)=>a+b.dt,0)/rd.length).toFixed(0):null };
+  },
   start: ()=>startUpgrade(),
   stop: ()=>{ abort=true; }
 };
