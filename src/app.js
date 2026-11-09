@@ -13,7 +13,8 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 let device=null, server=null, chW=null, chN=null;
 let frames=[], running=false, abort=false, target="M", fw=null;
-let hsReady=null;   // {r, t}：已握手但还没发参数，20 秒内可直接复用
+let hsReady=null;
+let switching=false;   // 正在主动断开切 Boot，别报错   // {r, t}：已握手但还没发参数，20 秒内可直接复用
 
 /* ---------------- 帧工具 ---------------- */
 function crc8(d){
@@ -105,6 +106,7 @@ async function gatt(){
   });
 }
 function onDisconnect(){
+  if(switching){ chip("切换中…","work"); return; }
   chip("已断开",""); setBadge(null);
   $("hMeta").textContent="连接已断开";
   $("btnDisc").disabled=true; $("btnProbe").disabled=true;
@@ -145,6 +147,7 @@ async function enterBoot(){
     try{ await chW.writeValue(APP_ENTER_BOOT); }catch(e){ log("进 Boot 命令发送失败："+e.message,"err"); return null; }
   }
   await sleep(3200);
+  switching=true;
   for(let i=1;i<=4;i++){
     try{
       try{ device.gatt.disconnect(); }catch(_){}
@@ -153,10 +156,11 @@ async function enterBoot(){
       await sleep(500);
       frames.length=0;
       const r=await request(T.HS, devInfo(target), T.HSR, 3000);
-      if(r){ log("已进入 Boot 模式","ok"); return r; }
+      if(r){ switching=false; log("已进入 Boot 模式","ok"); return r; }
     }catch(e){ log(`重连失败(${i})：${e.message}`,"dim"); }
     await sleep(1200);
   }
+  switching=false;
   return null;
 }
 
