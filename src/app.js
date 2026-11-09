@@ -14,7 +14,8 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 let device=null, server=null, chW=null, chN=null;
 let frames=[], running=false, abort=false, target="M", fw=null;
 let hsReady=null;
-let switching=false;   // 正在主动断开切 Boot，别报错   // {r, t}：已握手但还没发参数，20 秒内可直接复用
+let switching=false;
+let writeChain=Promise.resolve();   // 正在主动断开切 Boot，别报错   // {r, t}：已握手但还没发参数，20 秒内可直接复用
 
 /* ---------------- 帧工具 ---------------- */
 function crc8(d){
@@ -354,21 +355,18 @@ async function startUpgrade(){
     let sent=0, acked=0, rtx=0, stale=0;
     while(acked<total){
       if(abort) throw new Error("已中止");
-      const inflight=[];
       while(sent<total && sent-acked<win){
         const chunk=img.slice(sent*pkt,(sent+1)*pkt);
         const body=new Uint8Array(6+chunk.length);
         body.set(u16(sent),0); body.set(u16(total),2); body.set(u16(chunk.length),4);
         body.set(chunk,6);
-        inflight.push(writeFrame(makeFrame(T.DT, body)));   // 不逐包等，交给控制器排队
+        // Chrome 不允许同一特征并发写：用链式队列串行，但不阻塞节奏
+        const f=makeFrame(T.DT, body);
+        writeChain = writeChain.then(()=>chW.writeValueWithoutResponse(f));
         sent++;
         if(gap) await sleep(gap);
       }
-      if(inflight.length){
-        const res=await Promise.allSettled(inflight);
-        const bad=res.find(x=>x.status==="rejected");
-        if(bad) throw new Error("写入失败："+bad.reason.message);
-      }
+      await writeChain;
       const deadline=Date.now()+1000;
       let moved=false;
       while(Date.now()<deadline){
@@ -455,3 +453,53 @@ $("themes").onclick=e=>{ const b=e.target.closest("button"); if(b) applyTheme(b.
 if(!navigator.bluetooth){
   log("当前浏览器不支持 Web Bluetooth：请用安卓 Chrome / Edge，并确保是 https 页面","err");
 }
+
+/* ---------------- 对外 API（便于自动化/联调） ---------------- */
+window.ota = {
+  status(){
+    return {
+      connected: !!(device && device.gatt.connected),
+      name: device ? device.name : null,
+      mode: $("hBadge").textContent,
+      hw: $("kHw").textContent,
+      ver: $("kVer").textContent,
+      running,
+      pct: $("sPct").textContent,
+      pkts: $("sPkt").textContent,
+      speed: $("sSpd").textContent,
+      timings: { hs:$("tHs").textContent, data:$("tData").textContent, total:$("tAll").textContent },
+      log: [...document.querySelectorAll("#log div")].map(d=>d.textContent)
+    };
+  },
+  async connectGranted(){
+    if(!navigator.bluetooth.getDevices) throw new Error("浏览器不支持 getDevices");
+    const devs = await navigator.bluetooth.getDevices();
+    if(!devs.length) throw new Error("没有已授权的设备，请手动点一次「连接蓝牙」");
+    device = devs.find(d=>/AIMTECH|J51NG/i.test(d.name||"")) || devs[0];
+    device.addEventListener("gattserverdisconnected", onDisconnect);
+    await gatt();
+    $("hName").textContent = device.name || "(已授权设备)";
+    $("kId").textContent = device.id.slice(0,17);
+    $("btnDisc").disabled=false; $("btnProbe").disabled=false;
+    chip("已连接","on");
+    log("已连接（授权设备）"+device.name,"ok");
+    return await probeMode();
+  },
+  probe: ()=>probeMode(),
+  async useLibrary(index=0){
+    const res=await fetch("./firmware/index.json?t="+Date.now(),{cache:"no-store"});
+    const data=await res.json();
+    const ota=(data.items||[]).filter(x=>x.role!=="boot");
+    if(!ota[index]) throw new Error("库中没有该固件");
+    await useLibItem(ota[index]);
+    return ota[index].file;
+  },
+  async useUrl(url){
+    const res=await fetch(url); const buf=await res.arrayBuffer();
+    await loadFile(new File([buf], url.split("/").pop()));
+    return true;
+  },
+  setTarget(t){ const b=[...$("seg").children].find(x=>x.dataset.t===t); if(b) b.click(); return t; },
+  start: ()=>startUpgrade(),
+  stop: ()=>{ abort=true; }
+};
