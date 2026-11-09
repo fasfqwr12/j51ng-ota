@@ -517,6 +517,7 @@ async function startUpgrade(){
     log("[4] SHA-256 匹配","st");
 
     stage("写入并跳转");
+    log("[5] 正在写入并跳转，设备会复位重启（约 10~20 s，请勿断电）","dim");
     // 0x0501：升级期间蓝牙板可能主动断链，断了重连再发；单次只等 3 s，多发几次
     r = null;
     // 设备在把暂存区搬到 APP 区：先给 4 s 安静时间，期间发帧会拖慢它
@@ -528,22 +529,35 @@ async function startUpgrade(){
       }
       r = await request(T.DONE, new Uint8Array(0), T.DONER, 1500);
       if(r) break;
+      if(k%4===0) log(`    设备仍在写入，等待确认…（${k}/30）`,"dim");
       await sleep(500);
     }
-    if(!r) throw new Error("完成应答超时（0x0502 未收到）");
-    if(r[0]!==0) throw new Error("设备报错 0x"+r[0].toString(16));
+    if(!r){
+      // 设备可能已经写完直接复位，0x0502 丢在断开里 —— 重连看它跑的是不是新 APP
+      log("未收到 0x0502（设备可能已复位），重连确认实际状态…","dim");
+      const m0 = await waitReconnect(15000);
+      if(m0==="app"){
+        log("[7] ✅ 升级成功（0x0502 丢失，但设备已重启并运行新 APP）","st");
+        chip("升级成功","on"); stage("升级成功");
+        $("tAll").textContent=((performance.now()-t0)/1000).toFixed(1)+" s";
+        return;
+      }
+      throw new Error("等待设备确认超时，且设备未回到 APP");
+    }
+    if(r[0]!==0) throw new Error("设备报告写入失败，状态码 0x"+r[0].toString(16).padStart(2,"0"));
+    log(`[5] 设备已确认接管（0x0502=0x00）`,"st");
 
     $("bar").style.width="100%"; $("sPct").textContent="100%";
-    log("[5] 设备已确认接管（0x0502=0x00），即将复位","st");
 
     stage("等待设备重启");
+    log("[6] 设备复位中，等待重新连接…","dim");
     const mode = await waitReconnect(30000);
     if(mode==="app"){
-      log("[6] 设备已重启，运行新 APP","ok");
+      log("[7] ✅ 升级成功：设备已重启并运行新 APP","st");
       chip("升级成功","on");
       stage("升级成功");
     }else if(mode==="boot"){
-      log("[6] 设备已重启，但仍停在 Boot（派发未跳转）","err");
+      log("[7] ❌ 升级未完成：设备重启后仍停在 Boot（镜像未跳转）","err");
       chip("需重试",""); stage("需重试");
     }else{
       throw new Error("已派发但设备 30 s 内未回来，请断电重启确认");
@@ -554,7 +568,8 @@ async function startUpgrade(){
   }catch(e){
     stage("失败");
     chip("失败","");
-    log("!! "+e.message,"err");
+    log("❌ 升级失败："+e.message,"err");
+    log("   设备仍在，可重新点击「开始升级」重试","dim");
   }finally{
     running=false; $("btnStop").disabled=true; hsReady=null; refreshGo();
   }
