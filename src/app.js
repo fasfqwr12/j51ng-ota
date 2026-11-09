@@ -118,6 +118,22 @@ async function writeFrame(f){
   else await chW.writeValue(f);
 }
 async function writeCtrl(f){ await chW.writeValueWithResponse(f); }
+
+/* 数据包写：Chrome 对同一特征不允许并发，遇到 in progress 就等几毫秒重试 */
+async function writeData(f){
+  for(let i=0;i<4;i++){
+    try{
+      if(chW.writeValueWithoutResponse) await chW.writeValueWithoutResponse(f);
+      else await chW.writeValue(f);
+      return;
+    }catch(e){
+      if(/in progress/i.test(e.message||"")){ await sleep(6+ i*4); continue; }
+      throw e;
+    }
+  }
+  await chW.writeValue(f);   // 兜底：带响应写，确保一定发出去
+}
+
 async function send(type,payload){
   const f=makeFrame(type,payload);
   if(type===T.HS||type===T.PM||type===T.SHA||type===T.DONE) await writeCtrl(f);
@@ -305,7 +321,7 @@ async function startUpgrade(){
   $("btnStop").disabled=false;
   $("log").innerHTML="";
   const t0=performance.now();
-  const img=fw, win=8, gap=4;
+  const img=fw, win=8, gap=2;
   let pkt=231, total=0;
 
   $("sPct").textContent="0%"; $("bar").style.width="0%";
@@ -360,13 +376,10 @@ async function startUpgrade(){
         const body=new Uint8Array(6+chunk.length);
         body.set(u16(sent),0); body.set(u16(total),2); body.set(u16(chunk.length),4);
         body.set(chunk,6);
-        // Chrome 不允许同一特征并发写：用链式队列串行，但不阻塞节奏
-        const f=makeFrame(T.DT, body);
-        writeChain = writeChain.then(()=>chW.writeValueWithoutResponse(f));
+        await writeData(makeFrame(T.DT, body));
         sent++;
         if(gap) await sleep(gap);
       }
-      await writeChain;
       const deadline=Date.now()+1000;
       let moved=false;
       while(Date.now()<deadline){
