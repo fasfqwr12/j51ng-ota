@@ -154,8 +154,16 @@ async function writeData(f){
 
 async function send(type,payload){
   const f=makeFrame(type,payload);
-  if(type===T.HS||type===T.PM||type===T.SHA||type===T.DONE) await writeCtrl(f);
-  else await writeFrame(f);
+  const go=async()=>{ if(type===T.HS||type===T.PM||type===T.SHA||type===T.DONE) await writeCtrl(f); else await writeFrame(f); };
+  try{ await go(); }
+  catch(e){
+    if(/no longer valid|disconnected|not permitted/i.test(e.message||"")){
+      await gatt();            // 重新取服务和特征
+      await go();
+      return;
+    }
+    throw e;
+  }
 }
 async function waitFrame(type, ms){
   const t0=Date.now();
@@ -180,7 +188,7 @@ async function enterBoot(){
   for(let k=1;k<=4 && !sent;k++){
     try{
       // 设备重启后旧特征会失效，先确保链路和特征都是新的
-      if(!(device && device.gatt.connected) || !chW) await gatt();
+      if(k>1 || !(device && device.gatt.connected) || !chW) await gatt();
       await w(); sent=true;
     }catch(e){
       log(`进 Boot 命令写入失败(${k})：${e.message}`,"dim");
