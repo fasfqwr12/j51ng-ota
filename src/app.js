@@ -519,7 +519,6 @@ async function startUpgrade(){
     stage("写入并跳转");
     // 0x0501：升级期间蓝牙板可能主动断链，断了重连再发；单次只等 3 s，多发几次
     r = null;
-    await sleep(4000);   // 设备在把暂存区搬到 APP 区，先别打扰它
     for(let k=1;k<=30;k++){
       if(!(device && device.gatt.connected)){
         try{ await gatt(); log("    链路已断开，已重连","dim"); }

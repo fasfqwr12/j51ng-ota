@@ -1,5 +1,5 @@
 {
-  "updated": 1794211524,
+  "updated": 1794215667,
   "items": [
     {
       "file": "M_9501-000-02166_v1.hex",
@@ -19,11 +19,11 @@
       "target": "S",
       "targetName": "蓝牙板 S",
       "title": "S_app_9501-000-02150",
-      "size": 68224,
-      "fileSize": 191948,
-      "sha256": "09e2f496f7f63bfba45e78ed90be32734d312c027660fe8c9ef428e3fbb0a7f8",
+      "size": 68420,
+      "fileSize": 192509,
+      "sha256": "c7218aafc231df19e182c0754cdff9d326e3d371fa51c207f2088ef20c990ef4",
       "version": "",
-      "mtime": 1794211524.2214503
+      "mtime": 1794215667.2082648
     },
     {
       "file": "S_boot_rdts.hex",
