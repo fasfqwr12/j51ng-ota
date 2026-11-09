@@ -16,7 +16,7 @@ let frames=[], running=false, abort=false, target="M", fw=null;
 let hsReady=null;
 let switching=false;
 let writeChain=Promise.resolve();
-const TUNE = { win:8, gap:4 };   // 正在主动断开切 Boot，别报错   // {r, t}：已握手但还没发参数，20 秒内可直接复用
+const TUNE = { win:32, gap:4 };   // 实测：win=8 数据 8.1s；win=32 → 5.4s（与桌面版持平）   // 正在主动断开切 Boot，别报错   // {r, t}：已握手但还没发参数，20 秒内可直接复用
 
 /* ---------------- 帧工具 ---------------- */
 function crc8(d){
@@ -183,17 +183,17 @@ async function enterBoot(){
   }
   await sleep(3200);
   switching=true;
-  for(let i=1;i<=4;i++){
+  for(let i=1;i<=8;i++){
     try{
       try{ device.gatt.disconnect(); }catch(_){}
-      await sleep(1000);
+      await sleep(800 + Math.min(i,4)*600);
       await gatt();
       await sleep(500);
       frames.length=0;
       const r=await request(T.HS, devInfo(target), T.HSR, 3000);
       if(r){ switching=false; log("已进入 Boot 模式","ok"); return r; }
     }catch(e){ log(`重连失败(${i})：${e.message}`,"dim"); }
-    await sleep(1200);
+    await sleep(1500);
   }
   switching=false;
   return null;
@@ -388,7 +388,13 @@ async function startUpgrade(){
     let r = null;
     if(hsReady && Date.now()-hsReady.t < 20000){ r = hsReady.r; hsReady=null; log("[1] 复用已完成的握手","st"); }
     if(!r){
-      r = await request(T.HS, devInfo(target), T.HSR, 4000);
+      try{
+        r = await request(T.HS, devInfo(target), T.HSR, 4000);
+      }catch(e){
+        log("握手写入失败（"+e.message+"），重连后重试","dim");
+        await gatt(); hsReady=null;
+        r = await request(T.HS, devInfo(target), T.HSR, 4000);
+      }
       if(!r){
         log("握手无应答 → 设备在 APP，自动切 Boot 后重试","dim");
         stage("切换 Boot");
@@ -595,6 +601,12 @@ window.ota = {
     return true;
   },
   setTarget(t){ const b=[...$("seg").children].find(x=>x.dataset.t===t); if(b) b.click(); return t; },
+  async reconnect(){
+    try{ device?.gatt?.disconnect(); }catch(_){}
+    await sleep(700);
+    await gatt();
+    return await probeModeOnly();
+  },
   tune(win,gap){ if(win) TUNE.win=win; if(gap!==undefined) TUNE.gap=gap; return {...TUNE}; },
   perf(){
     const p=window.__perf||{wr:[],rounds:[]};
