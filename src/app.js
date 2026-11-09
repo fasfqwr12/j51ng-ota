@@ -420,13 +420,29 @@ async function startUpgrade(){
     log(`[3] 数据完成 ${img.length} B · ${dt.toFixed(1)} s · 重传 ${rtx}`,"st");
 
     stage("校验");
-    r = await request(T.SHA, sha, T.SHAR, 8000);
+    // 设备要先算整片 SHA，0x0401 是无响应写，可能丢 → 重发
+    for(let k=1;k<=5;k++){
+      r = await request(T.SHA, sha, T.SHAR, 8000);
+      if(r) break;
+      log(`    0x0401 第 ${k} 次无应答（设备可能在算 SHA），重发…`,"dim");
+      await sleep(1500);
+    }
     if(!r || r[0]!==0) throw new Error("SHA-256 校验失败");
     log("[4] SHA-256 匹配","st");
 
     stage("写入并跳转");
-    r = await request(T.DONE, new Uint8Array(0), T.DONER, 30000);
-    if(!r) throw new Error("完成应答超时");
+    // 0x0501：升级期间蓝牙板可能主动断链，断了重连再发；单次只等 3 s，多发几次
+    r = null;
+    for(let k=1;k<=20;k++){
+      if(!(device && device.gatt.connected)){
+        try{ await gatt(); log("    链路已断开，已重连","dim"); }
+        catch(e){ await sleep(1000); continue; }
+      }
+      r = await request(T.DONE, new Uint8Array(0), T.DONER, 3000);
+      if(r) break;
+      await sleep(500);
+    }
+    if(!r) throw new Error("完成应答超时（0x0502 未收到）");
     if(r[0]!==0) throw new Error("设备报错 0x"+r[0].toString(16));
 
     $("bar").style.width="100%"; $("sPct").textContent="100%";
