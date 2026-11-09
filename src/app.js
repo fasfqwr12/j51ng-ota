@@ -321,7 +321,7 @@ async function startUpgrade(){
   $("btnStop").disabled=false;
   $("log").innerHTML="";
   const t0=performance.now();
-  const img=fw, win=8, gap=2;
+  const img=fw, win=8, gap=4;
   let pkt=231, total=0;
 
   $("sPct").textContent="0%"; $("bar").style.width="0%";
