@@ -88,11 +88,21 @@ async function connect(){
     device=null;
   }
 }
+
+/* 连接超时包装：Chrome 的 gatt.connect() 在设备没广播时会挂几十秒，
+   这里给它一个短超时，超时就当"这次没扫到"，马上重试。 */
+function withTimeout(p, ms, what){
+  return Promise.race([
+    p,
+    new Promise((_, rej)=>setTimeout(()=>rej(new Error((what||"操作")+"超时")), ms))
+  ]);
+}
+
 let __gattLock=null;
-function gatt(){
+function gatt(timeoutMs){
   if(__gattLock) return __gattLock;
   __gattLock=(async()=>{
-  server = device.gatt.connected ? device.gatt : await device.gatt.connect();
+  server = device.gatt.connected ? device.gatt : await withTimeout(device.gatt.connect(), timeoutMs||8000, "连接");
   let svc;
   try{
     svc = await server.getPrimaryService(SVC);
@@ -215,13 +225,14 @@ function enterBoot(){
   switching=true;
   for(let i=1;i<=30;i++){
     try{
-      if(i>1) await sleep(i<=3 ? 500 : 700);
-      await gatt();
+      if(i>1) await sleep(400);
+      const __t=performance.now();
+      await gatt(1500);                       // 1.5 s 没连上就放弃，立刻下一轮
       await sleep(300);
       frames.length=0;
       const r=await request(T.HS, devInfo(target), T.HSR, 1200);
-      if(r){ switching=false; log(`已进入 Boot 模式（第 ${i} 次尝试）`,"ok"); return r; }
-    }catch(e){ log(`重连失败(${i})：${e.message}`,"dim"); }
+      if(r){ switching=false; log(`已进入 Boot 模式（第 ${i} 次尝试，${((performance.now()-__t)/1000).toFixed(1)} s）`,"ok"); return r; }
+    }catch(e){ if(i%2===0||i<3) log(`    扫描中(${i})… ${e.message}`,"dim"); }
     await sleep(600);
   }
   switching=false;
@@ -378,9 +389,10 @@ async function waitReconnect(maxMs=30000){
     n++;
     try{
       // 只连不踢：反复 disconnect 会让 Chrome 的连接状态机卡死
-      await gatt();
+      const __t=performance.now();
+      await gatt(1500);
       const m = await probeModeOnly(900);
-      log(`    重连成功（第 ${n} 次尝试）`,"ok");
+      log(`    重连成功（第 ${n} 次尝试，${((performance.now()-t0)/1000).toFixed(1)} s）`,"ok");
       setBadge(m);
       return m;
     }catch(e){
@@ -667,6 +679,15 @@ window.ota = {
     return true;
   },
   setTarget(t){ const b=[...$("seg").children].find(x=>x.dataset.t===t); if(b) b.click(); return t; },
+  async scanAndConnect(maxMs=30000){
+    const t0=performance.now(); let n=0;
+    while(performance.now()-t0<maxMs){
+      n++;
+      try{ await gatt(1500); const m=await probeModeOnly(1000); log(`扫描成功（第 ${n} 次，${((performance.now()-t0)/1000).toFixed(1)} s）→ ${m==="boot"?"Boot":"APP"}`,"ok"); return m; }
+      catch(e){ await sleep(400); }
+    }
+    throw new Error("扫描超时：设备未重新广播");
+  },
   async reconnect(){
     try{ device?.gatt?.disconnect(); }catch(_){}
     await sleep(700);
