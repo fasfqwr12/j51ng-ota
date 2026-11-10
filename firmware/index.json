@@ -1,5 +1,5 @@
 {
-  "updated": 1794282808,
+  "updated": 1794283707,
   "items": [
     {
       "file": "M_9501-000-02166_v1.hex",
@@ -7,11 +7,11 @@
       "target": "M",
       "targetName": "主控 M",
       "title": "M_9501-000-02166_v1",
-      "size": 104348,
-      "fileSize": 293550,
-      "sha256": "501ef2c0bcfd76ae7e8e8e36e1b60b8ab687b896d164ce7fe45ef90844463fbd",
+      "size": 104412,
+      "fileSize": 293730,
+      "sha256": "c8d368847ebf589d1303011fce3dc7ed701b76b12dc79350372ce6b47fd3a59a",
       "version": "v1",
-      "mtime": 1794282808.330431
+      "mtime": 1794283707.3752167
     },
     {
       "file": "S_app_9501-000-02150.hex",
@@ -31,11 +31,11 @@
       "target": "S",
       "targetName": "蓝牙板 S",
       "title": "S_boot_rdts",
-      "size": 36944,
-      "fileSize": 103956,
-      "sha256": "27481fbcab584353b0c9b5b6f90070356022aae4550bae4109270493bafa8fe9",
+      "size": 37124,
+      "fileSize": 104472,
+      "sha256": "40aedaf187dee1c363c3bb355152225da2fedf147f14905d1a0da08290085876",
       "version": "",
-      "mtime": 1794227298.8210003
+      "mtime": 1794283131.3996813
     }
   ]
 }
