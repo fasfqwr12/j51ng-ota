@@ -1,5 +1,5 @@
 {
-  "updated": 1794283707,
+  "updated": 1794284066,
   "items": [
     {
       "file": "M_9501-000-02166_v1.hex",
@@ -7,11 +7,11 @@
       "target": "M",
       "targetName": "主控 M",
       "title": "M_9501-000-02166_v1",
-      "size": 104412,
-      "fileSize": 293730,
-      "sha256": "c8d368847ebf589d1303011fce3dc7ed701b76b12dc79350372ce6b47fd3a59a",
+      "size": 104420,
+      "fileSize": 293759,
+      "sha256": "dab284891d7ffae627fbb7989e48760771a88dd03f1a61eaf1a32d6e2f980c85",
       "version": "v1",
-      "mtime": 1794283707.3752167
+      "mtime": 1794284066.1570833
     },
     {
       "file": "S_app_9501-000-02150.hex",
