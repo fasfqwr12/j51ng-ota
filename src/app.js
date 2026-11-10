@@ -122,7 +122,9 @@ function gatt(timeoutMs){
       if(a[i]===0xEB && a[i+1]===0x90){
         const len=rd16(a,i+4);
         if(i+7+len<=a.length){
-          frames.push({t:rd16(a,i+2), p:a.slice(i+6,i+6+len)});
+          const __t = rd16(a,i+2); const __p = a.slice(i+6,i+6+len);
+          if(__t!==0x0302 && __t!==0x0303 && __t!==0x0301 && __t!==0x0000) logRx(__t, __p);
+          frames.push({t:__t, p:__p});
           i+=7+len; continue;
         }
       }
@@ -139,11 +141,26 @@ function onDisconnect(){
   $("btnDisc").disabled=true; $("btnProbe").disabled=true;
   log("蓝牙连接断开","err");
 }
+
+/* ---- 原始帧日志：把蓝牙收发的每个控制帧打出来 ---- */
+const FRAME_NAME = {0x0000:"BEACON",0x0101:"HS请求",0x0102:"HS应答",0x0201:"参数请求",0x0202:"参数应答",
+  0x0301:"数据",0x0302:"ACK",0x0303:"NACK",0x0401:"SHA请求",0x0402:"SHA应答",
+  0x0501:"完成请求",0x0502:"完成应答",0x0601:"发主控EnterBL",0x0602:"发主控Raw",0x0603:"主控命令应答"};
+function hex2(p, n){ return [...p.slice(0, n)].map(b=>b.toString(16).padStart(2,'0').toUpperCase()).join(' '); }
+function logTx(type, payload){ log(`    → ${FRAME_NAME[type]||("0x"+type.toString(16))} len=${payload.length}`,"dim"); }
+function logRx(type, payload){
+  const nm = FRAME_NAME[type] || ("0x"+type.toString(16).padStart(4,'0'));
+  const body = payload.length ? " " + hex2(payload, 8) + (payload.length>8?" …":"") : "";
+  log(`    ← ${nm} len=${payload.length}${body}`,"dim");
+}
+
 async function writeFrame(f){
   if(chW.writeValueWithoutResponse) await chW.writeValueWithoutResponse(f);
   else await chW.writeValue(f);
 }
 async function writeCtrl(f){
+  try{ logTx(rd16(f,2), f.slice(6, f.length-1)); }catch(_){}
+
   // 本设备写特征不保证支持"带响应写"（Chrome 会报 NotSupportedError），
   // 优先用无响应写，失败再退回带响应写。
   try{
