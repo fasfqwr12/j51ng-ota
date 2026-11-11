@@ -65,24 +65,25 @@ const LANES=[
 ];
 const M=[
  {c:0,l:0,t:"选 M 镜像",f:".hex / .bin",d:"算 SHA256 与长度；HEX 按基址 0x08002800 展开。"},
- {c:1,l:0,t:"连接 / 探模式",f:"0x0101 -> 0x0102",d:"有应答=boot；无应答=APP，发 53 A2 04 00 FF 01 F9 01 让其写 PENDING 并复位。"},
- {c:2,l:1,t:"握手应答",f:"0x0102 maxpkt=228",d:"先 flush 再擦除，主机不会握手超时。"},
- {c:3,l:1,t:"阶段 A：原子擦除",f:"每片 4KB + 喂 BLE",d:"独占阶段：只擦一个扇区 + boot_ble_process()。不取帧、不写 flash、不回 ACK、不推进状态机。共 80 片，擦完才允许后续。",k:"risk"},
- {c:4,l:0,t:"参数帧",f:"0x0201 · 38 B",d:"size(4)+sha256(32)+pkt(2)。S 板存 expected_sha256。"},
- {c:5,l:1,t:"参数应答",f:"0x0202 status=0",d:"暂存区已擦净，立即放行。上位机收到才开始发数据。"},
- {c:6,l:0,t:"发数据包",f:"0x0301 x N",d:"128B(插件) / 228B(网页)，win=32。数据阶段独占，无任何擦除。"},
- {c:7,l:1,t:"写暂存 + ACK",f:"0x0302 批量",d:"ACK 只在 flash 写入成功后发。全 ACK 现在真正等于全写对。"},
- {c:8,l:1,t:"实算暂存 SHA",f:"compute_sha256",d:"先断言 written == firmware_total_size，再比摘要。",k:"ok"},
- {c:9,l:0,t:"SHA 请求",f:"0x0401",d:"payload 带 SHA，设备忽略，用 0x0201 的值。"},
- {c:10,l:1,t:"SHA 应答",f:"0x0402 status=0",d:"0x00=通过；0x11=暂存区内容不对。",k:"ok"},
- {c:11,l:1,t:"prestart 让主控复位",f:"main prestart AFTER SHA",d:"原在 0x0202 后与 BLE 并行；现移到 SHA 通过后串行。日志保留，可确认动作发生。",k:"info"},
- {c:12,l:2,t:"让主控进 boot",f:"0x1000 / 0x1001 / 0x1002",d:"ENTER_BL -> announce ready=1 -> 交 version+SHA。共用 UART，PC 的 CH340 必须拔。"},
- {c:13,l:3,t:"写主控 APP 区",f:"0x1011 x 102",d:"从暂存区按 pkt_index*1024 读。主控累计 written_offset 写 0x08002800，擦写失败即回 0x23 不 ACK。"},
- {c:14,l:3,t:"主控回报",f:"0x1012 / 0x1021",d:"0x1021 status=0 才是主控 APP 区 SHA 通过。",k:"ok"},
- {c:15,l:2,t:"完成指令",f:"0xFF00",d:"主控更新 boot_data 并跳新 APP。"},
- {c:16,l:1,t:"完成应答",f:"0x0502 = 0x00",d:"apply 结果，不是「收到」。",k:"ok"},
- {c:17,l:3,t:"主控跳新 APP",f:"jump_to_application",d:"校验 SP/PC 后跳转。",k:"ok"},
- {c:18,l:1,t:"S 板留在 boot",f:"不复位 / 不断链",d:"只有 dispatch_target==SUB 才复位。给主控升级时副板固件没变，继续广播。",k:"ok"}
+ {c:1,l:0,t:"连接 / 探模式",f:"0x0101 -> 0x0102",d:"有应答=boot；无应答=APP，发 53 A2 04 00 FF 01 F9 01 让其复位。上位机只发 16B 硬件码，其余全在 S 板 boot 内完成。"},
+ {c:2,l:1,t:"握手应答 + 判定目标",f:"0x0102 maxpkt=228",d:"先 flush 发出去。此刻 S 板已知目标是 M/R，立刻触发外部板启动。"},
+ {c:3,l:2,t:"外部板先启动（并行）",f:"0x1000 ENTER_BL",d:"目标=M/R 时，握手阶段就通过 UART 发 ENTER_BL，让外部板自己复位进 boot、自己初始化、自己擦 APP 区。它是另一颗芯片，不占 S 板 CPU。",k:"info"},
+ {c:4,l:3,t:"外部板自己就位",f:"复位 / 初始化 / 擦 APP 区",d:"外部板独立完成 0x1001 announce ready=1，静静等着。与 S 板下面所有动作同时进行 —— 这才是省时间。",k:"info"},
+ {c:5,l:1,t:"阶段 A：原子擦除",f:"每片 4KB + 喂 BLE",d:"S 板自己的独占阶段：只擦一个扇区 + boot_ble_process()。不取帧、不写 flash、不回 ACK、不推进状态机。共 80 片。",k:"risk"},
+ {c:6,l:0,t:"参数帧",f:"0x0201 · 38 B",d:"size(4)+sha256(32)+pkt(2)。S 板存 expected_sha256。"},
+ {c:7,l:1,t:"参数应答",f:"0x0202 status=0",d:"暂存区已擦净，立即放行。上位机收到才开始发数据。"},
+ {c:8,l:0,t:"发数据包",f:"0x0301 x N",d:"128B(插件) / 228B(网页)，win=32。数据阶段独占，无任何擦除。"},
+ {c:9,l:1,t:"写暂存 + ACK",f:"0x0302 批量",d:"ACK 只在 flash 写入成功后发。全 ACK 现在真正等于全写对。"},
+ {c:10,l:1,t:"实算暂存 SHA",f:"compute_sha256",d:"先断言 written == firmware_total_size，再比摘要。",k:"ok"},
+ {c:11,l:0,t:"SHA 请求",f:"0x0401",d:"设备忽略 payload 里的 SHA，用 0x0201 的值。"},
+ {c:12,l:1,t:"SHA 应答",f:"0x0402 status=0",d:"0x00=通过；0x11=暂存区内容不对。",k:"ok"},
+ {c:13,l:2,t:"交握手 + 转发",f:"0x1002 / 0x1011",d:"外部板早已 ready=1，直接交 version+SHA 然后转发。共用 UART，PC 的 CH340 必须拔。"},
+ {c:14,l:3,t:"写主控 APP 区",f:"0x1011 x 102",d:"从暂存区按 pkt_index*1024 读。主控累计 written_offset 写 0x08002800，擦写失败即回 0x23 不 ACK。"},
+ {c:15,l:3,t:"主控回报",f:"0x1012 / 0x1021",d:"0x1021 status=0 才是主控 APP 区 SHA 通过。",k:"ok"},
+ {c:16,l:2,t:"完成指令",f:"0xFF00",d:"主控更新 boot_data 并跳新 APP。"},
+ {c:17,l:1,t:"完成应答",f:"0x0502 = 0x00",d:"apply 结果，不是「收到」。",k:"ok"},
+ {c:18,l:3,t:"主控跳新 APP",f:"jump_to_application",d:"校验 SP/PC 后跳转。",k:"ok"},
+ {c:19,l:1,t:"S 板留在 boot",f:"不复位 / 不断链",d:"只有 dispatch_target==SUB 才复位。给主控升级时副板固件没变，继续广播。",k:"ok"}
 ];
 const S=[
  {c:0,l:0,t:"选 S 镜像",f:".hex / .bin",d:"基址 0x01010000。"},
@@ -116,8 +117,7 @@ const R=[
  {c:10,l:1,t:"prestart 位置记录",f:"main prestart AFTER SHA",d:"原并行省时间、现串行不挤 CPU；日志保留。",k:"info"}
 ];
 const PHASES={
- M:[{a:0,b:2,t:"阶段 0 连接"},{a:3,b:3,t:"阶段 A 原子擦除",r:1},{a:4,b:8,t:"阶段 B 数据(独占)"},
-    {a:9,b:10,t:"阶段 C 校验"},{a:11,b:15,t:"阶段 D 转发(独占)"},{a:16,b:18,t:"阶段 E 收尾",g:1}],
+ M:[{a:0,b:2,t:"阶段 0 连接+判目标"},{a:3,b:4,t:"外部板并行启动",i:1},{a:5,b:5,t:"阶段 A 原子擦除",r:1},{a:6,b:10,t:"阶段 B 数据(独占)"},{a:11,b:12,t:"阶段 C 校验"},{a:13,b:16,t:"阶段 D 转发(独占)"},{a:17,b:19,t:"阶段 E 收尾",g:1}],
  S:[{a:0,b:2,t:"阶段 0 连接"},{a:3,b:3,t:"阶段 A 原子擦除",r:1},{a:4,b:8,t:"阶段 B 数据/校验"},
     {a:9,b:13,t:"阶段 D 切片搬运"},{a:14,b:15,t:"阶段 E 复位",g:1}],
  R:[{a:0,b:3,t:"擦 / 写 独立"},{a:4,b:6,t:"校验 / 复位"},{a:7,b:10,t:"借鉴与保留",g:1}]
@@ -146,7 +146,7 @@ function render(v){
  // 阶段色带（左侧时间轴）
  ph.forEach(p=>{
   const y1=Y0+p.a*ROW-10, y2=Y0+p.b*ROW+H+8;
-  const col=p.r?"#c1440e":(p.g?"#2e7d4f":"#2f5d8a");
+  const col=p.r?"#c1440e":(p.g?"#2e7d4f":(p.i?"#2f5d8a":"#2f5d8a"));
   s+=`<rect class="phaseband" x="4" y="${y1}" width="64" height="${y2-y1}" rx="5" fill="${col}"/>`;
   const mid=(y1+y2)/2;
   p.t.split(" ").forEach((seg,k)=>{
