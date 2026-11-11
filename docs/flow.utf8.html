@@ -2,268 +2,128 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>J51NG OTA 流程图 · M / S 双链路</title>
+<title>J51NG OTA 竖向流程图</title>
 <style>
-  :root{
-    --bg:#f5f6f2; --card:#fff; --ink:#1f2420; --muted:#6c756c;
-    --line:#c9d2c4; --accent:#4b6b3c; --accent2:#2f5d8a;
-    --warn:#c1440e; --warnbg:#fff1e8; --ok:#2e7d4f; --okbg:#eaf6ee;
-    --lane0:#eef3e8; --lane1:#e8f0f7; --lane2:#f7f1e6; --lane3:#f3eaf3;
-  }
-  *{box-sizing:border-box}
-  body{margin:0;background:var(--bg);color:var(--ink);
-       font:14px/1.55 -apple-system,"Segoe UI","Microsoft YaHei",sans-serif}
-  header{background:#243024;color:#fff;padding:18px 26px}
-  header h1{margin:0;font-size:19px;letter-spacing:.5px}
-  header p{margin:5px 0 0;color:#b9c9b4;font-size:12.5px}
-  .tabs{display:flex;gap:8px;padding:14px 26px 0;flex-wrap:wrap}
-  .tab{border:1px solid var(--line);background:#fff;color:var(--muted);
-       padding:8px 18px;border-radius:20px;cursor:pointer;font-size:13.5px}
-  .tab.on{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
-  .wrap{padding:14px 26px 30px}
-  .bar{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin:6px 0 12px}
-  .legend{display:flex;gap:14px;flex-wrap:wrap;font-size:12.5px;color:var(--muted)}
-  .lg{display:inline-flex;align-items:center;gap:6px}
-  .dot{width:11px;height:11px;border-radius:3px;display:inline-block}
-  .hint{font-size:12px;color:var(--muted);margin-left:auto}
-  .stage{background:var(--card);border:1px solid var(--line);border-radius:10px;
-         overflow:auto;box-shadow:0 1px 3px #0000000d}
-  svg{display:block}
-  .grid{stroke:#dfe6d9;stroke-width:1}
-  .lanebg{fill-opacity:.55}
-  .lanelabel{font-size:12.5px;font-weight:700;fill:#42503c}
-  .lanesub{font-size:10.5px;fill:#82907c}
-  .node{cursor:pointer}
-  .node rect{stroke-width:1.6;rx:8}
-  .node .t{font-size:12px;font-weight:700;fill:#1f2420}
-  .node .f{font-size:10.5px;fill:#5b6a55;font-family:ui-monospace,Consolas,monospace}
-  .node .n{font-size:9.5px;fill:#8a9484}
-  .node:hover rect{stroke-width:2.6}
-  .edge{fill:none;stroke:#9aa89a;stroke-width:1.7;marker-end:url(#ar)}
-  .edge.risk{stroke:var(--warn);stroke-width:2.2;stroke-dasharray:5 4}
-  .banner{fill:var(--warnbg);stroke:var(--warn);stroke-width:1;rx:7}
-  .banner-t{font-size:11px;fill:var(--warn);font-weight:700}
-  .oknode{stroke:var(--ok)}
-  .risknode{stroke:var(--warn);stroke-dasharray:4 3}
-  .cmp{display:none}
-  .cmp.on{display:block}
-  table{border-collapse:collapse;width:100%;background:#fff;
-        border:1px solid var(--line);border-radius:8px;overflow:hidden;font-size:13px}
-  th,td{border-bottom:1px solid #e6ebe2;padding:10px 13px;text-align:left;vertical-align:top}
-  th{background:#eef3e8;font-weight:700}
-  td.k{font-weight:600;width:22%}
-  .callout{background:var(--warnbg);border-left:4px solid var(--warn);
-           padding:12px 16px;margin:14px 0 0;border-radius:0 8px 8px 0;font-size:13px}
-  .callout b{color:var(--warn)}
-  .good{background:var(--okbg);border-left-color:var(--ok)}
-  .good b{color:var(--ok)}
-  #detail{position:fixed;right:18px;bottom:18px;width:340px;background:#fff;
-          border:1px solid var(--line);border-left:4px solid var(--accent);
-          border-radius:9px;padding:14px 16px;box-shadow:0 6px 24px #0002;display:none;z-index:9}
-  #detail h3{margin:0 0 6px;font-size:14px}
-  #detail .fr{font:11.5px ui-monospace,Consolas,monospace;color:var(--accent2);margin-bottom:8px}
-  #detail p{margin:0;font-size:12.5px;color:#4a5546}
-  #detail .x{position:absolute;right:10px;top:8px;cursor:pointer;color:#98a294}
-  footer{padding:0 26px 30px;color:var(--muted);font-size:12px}
-  code{background:#eef1ea;padding:1px 5px;border-radius:4px;font-size:12px}
-  @media print{.tabs,#detail .x{display:none}.stage{overflow:visible}}
+*{box-sizing:border-box}
+body{margin:0;background:#f4f6f1;color:#20261f;font:14px/1.6 "Microsoft YaHei","Segoe UI",sans-serif}
+header{background:#26321f;color:#fff;padding:16px 24px}
+header h1{margin:0;font-size:18px}
+header p{margin:4px 0 0;color:#b8c9ae;font-size:12px}
+.tabs{display:flex;gap:8px;padding:12px 24px 0;flex-wrap:wrap}
+.tab{border:1px solid #cbd5c3;background:#fff;color:#5c6a56;padding:7px 16px;border-radius:18px;cursor:pointer;font-size:13px}
+.tab.on{background:#4b6b3c;border-color:#4b6b3c;color:#fff;font-weight:700}
+main{max-width:900px;margin:14px auto 40px;padding:0 18px}
+.step{display:grid;grid-template-columns:56px 1fr;gap:14px}
+.num{width:44px;height:44px;border-radius:50%;background:#4b6b3c;color:#fff;font-weight:800;
+     display:flex;align-items:center;justify-content:center;font-size:16px;position:relative;margin:0 auto}
+.num.risk{background:#c1440e}.num.ok{background:#2e7d4f}.num.info{background:#2f5d8a}
+.step:not(:last-child) .num:after{content:"";position:absolute;top:44px;left:21px;width:2px;height:30px;background:#c9d6bf}
+.card{background:#fff;border:1px solid #d5dfcd;border-left:4px solid #7d9a6c;border-radius:9px;
+      padding:10px 14px;margin-bottom:14px;cursor:pointer}
+.card.risk{border-left-color:#c1440e;background:#fff7f2}
+.card.ok{border-left-color:#2e7d4f;background:#f0f9f3}
+.card.phase{border-left-color:#2f5d8a;background:#eef4fa}
+.card h3{margin:0 0 3px;font-size:14px}
+.card .fr{font:11.5px Consolas,monospace;color:#2f5d8a}
+.card p{margin:5px 0 0;font-size:12.5px;color:#4e5a49}
+.phasebar{background:#2f5d8a;color:#fff;border-radius:7px;padding:8px 14px;margin:20px 0 12px;font-weight:700;font-size:13px}
+.phasebar.risk{background:#c1440e}
+#d{position:fixed;right:16px;bottom:16px;width:330px;background:#fff;border:1px solid #d5dfcd;
+   border-left:4px solid #4b6b3c;border-radius:9px;padding:13px 15px;box-shadow:0 6px 22px #0002;display:none;z-index:9}
+#d h3{margin:0 0 5px;font-size:14px}#d p{margin:0;font-size:12.5px;color:#4a5546}
+#d .x{float:right;cursor:pointer;color:#96a292}
+code{background:#eef2ea;padding:1px 5px;border-radius:4px;font-size:12px}
+footer{text-align:center;color:#78836f;font-size:12px;padding:0 0 30px}
 </style>
 </head>
 <body>
-<header>
-  <h1>J51NG OTA · 升级流程图</h1>
-  <p>上位机 → S 蓝牙板（暂存/中转） → M 主控　·　泳道 = 角色，横向 = 时间　·　点击任意节点看说明</p>
-</header>
-
+<header><h1>J51NG OTA · 竖向流程图（数字编号）</h1>
+<p>从上到下 = 时间顺序 · 每个阶段独占 CPU · 点击卡片看说明</p></header>
 <div class="tabs">
-  <button class="tab on" data-v="M">① 主控 M 升级</button>
-  <button class="tab" data-v="S">② 蓝牙板 S 自升级</button>
-  <button class="tab" data-v="C">③ 插件 vs 网页 / 竞态</button>
-  <button class="tab" data-v="P">④ Boot↔APP 电源与标志</button>
+ <button class="tab on" data-v="M">① 主控 M 升级</button>
+ <button class="tab" data-v="S">② 蓝牙板 S 自升级</button>
+ <button class="tab" data-v="R">③ 参考设计对比</button>
 </div>
-
-<div class="wrap">
-  <div class="bar">
-    <div class="legend">
-      <span class="lg"><i class="dot" style="background:#dcebd0;border:1.5px solid #4b6b3c"></i>普通步骤</span>
-      <span class="lg"><i class="dot" style="background:#eaf6ee;border:1.5px solid #2e7d4f"></i>成功判据</span>
-      <span class="lg"><i class="dot" style="background:#fff1e8;border:1.5px dashed #c1440e"></i>风险 / 竞态点</span>
-      <span class="lg"><i class="dot" style="background:#9aa89a"></i>控制流</span>
-      <span class="lg"><i class="dot" style="background:#c1440e"></i>风险流</span>
-    </div>
-    <span class="hint">横向可滚动 · 单文件离线可用</span>
-  </div>
-
-  <div class="stage" id="stage"></div>
-
-  <div class="cmp" id="cmpC">
-    <table>
-      <tr><th>项</th><th>桌面插件 ble_daemon.py</th><th>网页 app.js</th></tr>
-      <tr><td class="k">BLE 后端</td><td>Python bleak / WinRT</td><td>Chrome Web Bluetooth</td></tr>
-      <tr><td class="k">分包（M 镜像）</td><td>128 B × 816</td><td>228 B × 458</td></tr>
-      <tr><td class="k">窗口 / 间隔</td><td>win=32，每 4 包 sleep 4 ms</td><td>win=32，每包 sleep 4 ms</td></tr>
-      <tr><td class="k">数据阶段</td><td>~8 s</td><td>7.5 s（更快）</td></tr>
-      <tr><td class="k">M 实机结果</td><td>✅ 成功过 <code>0x1021 status=0</code> → <code>0x0502=0x00</code></td><td>❌ <code>0x0402=0x11</code> SHA 失败</td></tr>
-      <tr><td class="k">失败记录</td><td>⚠️ 早前 <code>status=17</code> / 参数无应答</td><td>⚠️ 数据全 ACK 但暂存区内容不对</td></tr>
-      <tr><td class="k">协议 / CRC / SHA</td><td colspan="2">完全一致，差异只有<strong>节奏</strong></td></tr>
-    </table>
-    <div class="callout"><b>竞态根因：</b>S 板 <code>0x0202</code> 在暂存区还没擦完时就发出，上位机立刻灌 458 包；
-      而 <code>process()</code> 擦除期间 <code>return PENDING</code> 不取 BLE 帧 → 数据帧堆在 RX 环里被丢，
-      批量 ACK 却照发 → <b>「全包 ACK、0 重传」但暂存区是旧数据</b> → 实算 SHA ≠ 期望值。
-      插件包更小更慢、且 UART idle hook 里额外跑 BLE process，所以更容易过，但不是零概率。</div>
-    <div class="callout good"><b>修复方向（已编译未烧）：</b>把 <code>0x0202</code> 挂起到 <code>erase done</code> 之后再发；
-      擦除期间用 peek 只放行控制帧，数据帧留在环里不消费。主机收到应答才开始发数据，竞态从时序上消失。</div>
-  </div>
-
-  <div class="cmp" id="cmpP">
-    <table>
-      <tr><th>环节</th><th>代码位置</th><th>必须做的事</th></tr>
-      <tr><td class="k">M boot 电源</td><td><code>m_boot io_init()</code></td><td><code>PD1</code> 自保电 + <code>PA11</code> 蓝牙供电，<code>GPIO_BOP</code> 全部拉高；main() 第一条</td></tr>
-      <tr><td class="k">S boot 电源</td><td><code>power_gpio_init()</code></td><td><code>PB1</code> POWER + <code>PB12</code> EN2 都 <code>GPIO_SetBits</code></td></tr>
-      <tr><td class="k">S APP 电源</td><td><code>Power_Gpio_Init()</code></td><td>必须与 boot 一致拉高；原来 <code>POWER_OFF()</code> 一跳 APP 就断电变砖（已修）</td></tr>
-      <tr><td class="k">APP → Boot 命令</td><td><code>app_protocol.c</code></td><td><code>53 A2 04 00 FF 01 F9 01</code>：写 PENDING → 回 0x54A1 → 200 ms 刷 BLE → <code>NVIC_SystemReset()</code> 完整复位</td></tr>
-      <tr><td class="k">升级标志</td><td><code>0x0100FF00</code> word2</td><td><code>0xFFFFFFFF</code>=NONE，<code>1</code>=PENDING；<b>必须先擦页再写</b>，否则 PGERR</td></tr>
-      <tr><td class="k">boot 快路径</td><td><code>s_boot main.c:206</code></td><td>只有「APP 合法 <b>且</b> flag≠PENDING」才跳 APP；否则留 boot 广播</td></tr>
-      <tr><td class="k">调试 / 量产</td><td><code>src/boot_log.h</code></td><td><code>BOOT_LOG_MODE</code>：0=静音（省 6.8 KB，当前值），1=全量日志</td></tr>
-      <tr><td class="k">一个中心原则</td><td>BLE 协议</td><td>设备连上任意中心后<strong>不再广播</strong>；插件 / 网页 / 手机同一时刻只能有一个</td></tr>
-    </table>
-    <div class="callout"><b>复位判据坑：</b>只在 <code>target==SUB</code> 时复位，但 <code>reset_session()</code> 会先把 target 清掉
-      → 判断永远不成立 → 升级成功却不复位。正确做法：在置 <code>reset_pending</code> 时把目标存进独立
-      <code>s_dispatch_target</code>，main 用 getter 读它。</div>
-    <div class="callout"><b>完成应答坑：</b>APPLYING 期间 <code>process()</code> 提前 return，<code>0x0501</code> 连读都没读。
-      上位机必须重发（插件 2 s×30、网页 1.5 s×30），等 apply 结束回 BEACON 才被处理。</div>
-  </div>
-</div>
-
-<div id="detail"><span class="x" onclick="hideD()">✕</span><h3></h3><div class="fr"></div><p></p></div>
-
-<footer>
-  冻结基线 2026-11-11 · 配套文档：01-overview / 02-flow-M / 03-flow-S / 04-boot-app-mode / 05-host-diff-and-race / 06-protocol-frames / 07-verification-log
-</footer>
-
+<main id="root"></main>
+<div id="d"><span class="x" onclick="hide()">X</span><h3></h3><p></p></div>
+<footer>冻结基线 2026-11-11 · 协议不变，仅交互时序串行化</footer>
 <script>
-/* ---------- 数据：lane 0=上位机 1=S蓝牙板 2=S↔M UART 3=M主控 ---------- */
-const LANES=[
-  {n:"上位机",    s:"PC / 浏览器 · 唯一 BLE 中心", c:"var(--lane0)"},
-  {n:"S 蓝牙板",  s:"N32WB031 · BLE 从机 + 暂存 + 中转", c:"var(--lane1)"},
-  {n:"S↔M UART",  s:"0x10xx 帧 · 共用线，勿插 CH340", c:"var(--lane2)"},
-  {n:"M 主控",    s:"GD32F303CB · UART 从机", c:"var(--lane3)"}
+const V={};
+V.M=[
+ {k:"phase",t:"阶段 0 · 连接与模式",f:"",d:"上位机连上 S 板（唯一 BLE 中心）。0x0101 有应答=已在 boot；无应答=在 APP，先发 53 A2 04 00 FF 01 F9 01 让其写 PENDING 并复位。"},
+ {n:1,t:"0x0101 握手请求",f:"上位机 -> S板 · 16B 硬件码 J51VA-M",d:"S 板据硬件码判定目标为 M，回 0x0102 含 maxpkt=228、暂存区可用大小。"},
+ {n:2,t:"0x0102 应答先发出",f:"S板 -> 上位机 · ble_flush_tx_ms(30)",d:"关键：先刷出去主机才不会握手超时。以前整片擦除压在应答前，导致 0x0101 偶发超时。"},
+ {k:"phase risk",t:"阶段 A · 擦除暂存区（独占、原子）",f:"",d:"本次改动核心：擦除成为一个独立阶段，不再与收数据并行。"},
+ {n:3,t:"分片擦除，每片喂一次 BLE",f:"for sector = 0x01030000 .. 0x01080000",d:"每片 4KB 共 80 片。循环里只做两件事：boot_flash_erase_range() + boot_ble_process()（只喂 BLE 回调保连接）。不取协议帧、不写 flash、不回 ACK、不推进状态机 —— CPU 不再又擦又传又写又回调。"},
+ {n:4,t:"擦除完成，复位写游标",f:"[BL] erase done (atomic)",d:"boot_flash_set_write_address(0x01030000)。此时主机还在等流程，一个数据包都没发。"},
+ {k:"phase",t:"阶段 B · 参数与数据（独占）",f:"",d:"擦除完全结束后才允许进入。"},
+ {n:5,t:"0x0201 参数帧",f:"size(4)+sha256(32)+pkt(2) = 38B",d:"S 板记录 firmware_total_size 与 expected_sha256。0x0401 里再带的 SHA 会被忽略。"},
+ {n:6,t:"0x0202 立即应答",f:"S板 -> 上位机 · status=0 + flush",d:"暂存区已擦净，无需挂起。上位机收到才开始发数据。"},
+ {n:7,t:"0x0301 数据包 xN",f:"128B(插件) / 228B(网页)",d:"seq/total/len/data + CRC8，win=32。数据阶段独占：只收包、写暂存 flash、回 ACK，没有任何擦除，也没有 UART 动作。"},
+ {n:8,t:"0x0302 批量 ACK",f:"S板 -> 上位机 · 每 8 包",d:"ACK 只在 flash 写入成功后发。全 ACK 现在真正等于全写对。"},
+ {k:"phase",t:"阶段 C · 校验（独占）",f:"",d:""},
+ {n:9,t:"实算暂存区 SHA256",f:"boot_flash_compute_sha256(base, written)",d:"先断言 written == firmware_total_size，再与 expected_sha256 比对。0x0401/0x0402 交换结果。"},
+ {n:10,t:"0x0402 status=0",f:"S板 -> 上位机",d:"暂存区校验通过，进入 APPLYING。0x11=失败。"},
+ {k:"phase info",t:"阶段 D · 转发给主控（独占）",f:"prestart 在这里",d:"以前 prestart 挂在 0x0202 之后、与 BLE 传数据并行（省时间但 CPU 同时干两类事）；现在移到 SHA 通过之后，完全串行。日志：[BL] main prestart AFTER SHA。"},
+ {n:11,t:"prepare：让主控进 boot",f:"boot_main_upgrade_prepare()",d:"S 板通过 UART 发 0x1000 ENTER_BL，让主控复位进 boot、握手、擦除自己 APP 区。此时 BLE 数据已全收完，CPU 只干这一件事。"},
+ {n:12,t:"0x1011 转发 x102",f:"S板 -> M · 每包 1024B",d:"从暂存区按 pkt_index*1024 顺序读出。主控用累计 written_offset 写 0x08002800，擦/写失败即回 0x23 不 ACK。"},
+ {n:13,t:"0x1021 status=0",f:"M -> S · SHA 结果",d:"主控对 APP 区算 BL_SHA256_Compute，与 0x1002 期望值比对。0x00 才是真通过。"},
+ {n:14,t:"0xFF00 完成指令",f:"S板 -> M",d:"主控更新 boot_data 并跳新 APP。"},
+ {k:"phase ok",t:"阶段 E · 收尾",f:"",d:""},
+ {n:15,t:"0x0502=0x00",f:"S板 -> 上位机",d:"apply 成功应答，语义是应用结果，不是收到。"},
+ {n:16,t:"主控跳新 APP；S 板留在 boot",f:"不复位 / 不断链",d:"只有 dispatch_target==SUB 才复位。给主控升级时副板固件没变，原地待命继续广播。"}
 ];
-const M=[
- {c:0,l:0,t:"选 M 镜像",f:".hex / .bin",d:"算 SHA256 与长度；HEX 按基址 0x08002800 展开。库里 index.json 的 SHA 是旧值，上位机现场重算。"},
- {c:1,l:0,t:"连接 / 探模式",f:"0x0101 → 0x0102",d:"有应答=已在 boot；无应答=在 APP，先发 53 A2 04 00 FF 01 F9 01 让其写 PENDING 并复位。"},
- {c:2,l:1,t:"握手应答",f:"0x0102 maxpkt=228",d:"设备返回最大包长。插件取 128 B，网页取 228 B（pkt & ~3 对齐）。"},
- {c:3,l:0,t:"参数帧",f:"0x0201 · 38 B",d:"size(4) + sha256(32) + pkt(2)。S 板把 sha256 存为 expected_sha256，0x0401 里再带的 SHA 会被忽略。"},
- {c:4,l:1,t:"分片擦暂存区",f:"每拍 4 KB",d:"⚠️ 风险点：擦除期间 process() 原来直接 return，不取任何 BLE 帧。暂存区基址 0x01030000。",k:"risk"},
- {c:5,l:1,t:"参数应答",f:"0x0202 status=0",d:"⚠️ 竞态核心：原来擦除没完成就发，上位机立刻灌数据 → 写进未擦除区 / 帧被丢。修复：挂起到 erase done 后才发。",k:"risk"},
- {c:6,l:0,t:"发数据包",f:"0x0301 × N",d:"seq(2)+total(2)+len(2)+data+CRC8。win=32；插件 128 B×816，网页 228 B×458。"},
- {c:7,l:1,t:"写暂存 + ACK",f:"0x0302 批量",d:"批量缓存 4KB 后写 flash，每 8 包回一次 ACK。⚠️ 全 ACK ≠ 全写对，必须看 flash API 返回值。",k:"risk"},
- {c:8,l:1,t:"实算暂存 SHA",f:"boot_flash_compute_sha256",d:"对暂存区 [base, written) 实算；断言 written == firmware_total_size 后再比摘要。"},
- {c:9,l:0,t:"SHA 请求",f:"0x0401",d:"payload 带 SHA，但设备忽略，用的是 0x0201 存下的期望值。"},
- {c:10,l:1,t:"SHA 应答",f:"0x0402 status=0",d:"0x00=暂存区校验通过；0x11=SHA_FAIL（网页本次就卡在这里，实算 3c703926… ≠ 期望 11a8f0f2…）。",k:"ok"},
- {c:11,l:2,t:"让主控进 boot",f:"0x1000 / 0x1001 / 0x1002",d:"ENTER_BL → 主控 announce ready=1 → 把 version+SHA 交给主控。共用 UART，PC 的 CH340 必须拔掉。"},
- {c:12,l:3,t:"写主控 APP 区",f:"0x1011 × 102",d:"S 板从暂存区按 pkt_index*1024 读，每包最多 1024 B。主控用累计 written_offset 写 0x08002800，不再用 seq*1024 推算。"},
- {c:13,l:3,t:"主控回报",f:"0x1012 / 0x1021",d:"逐包 ACK 必须只在擦/写成功后发；最后一包后算 BL_SHA256_Compute。0x1021 status=0 才是主控 SHA 通过。",k:"ok"},
- {c:14,l:2,t:"完成指令",f:"0xFF00",d:"S 板收到 0x1021 status=0 后发完成，主控更新 boot_data 并跳新 APP。"},
- {c:15,l:1,t:"完成应答",f:"0x0502 = 0x00",d:"apply 成功后回上位机。语义是「应用结果」，不是「收到」。",k:"ok"},
- {c:16,l:3,t:"主控跳新 APP",f:"jump_to_application",d:"boot_data 更新版本/长度/SHA，校验 SP/PC 后跳转。",k:"ok"},
- {c:17,l:1,t:"S 板留在 boot",f:"不复位 / 不断链",d:"⚠️ 只有 dispatch_target==SUB 才复位。给主控升级时 S 板固件没变，原地重新待命继续广播，上位机无需重连。",k:"ok"}
+V.S=[
+ {k:"phase",t:"阶段 0 · 连接与模式",f:"",d:"0x0101 有应答=boot；无应答=APP，发进 Boot 命令复位。"},
+ {n:1,t:"0x0101 / 0x0102",f:"硬件码 J51VA-S",d:"同 M 路径。"},
+ {k:"phase risk",t:"阶段 A · 擦除暂存区（独占、原子）",f:"",d:"与 M 完全相同：0x0102 先发，然后分片擦 + 喂 BLE，擦完才允许后续。"},
+ {n:2,t:"分片擦除完成",f:"[BL] erase done (atomic)",d:"不取帧、不写、不回 ACK。"},
+ {k:"phase",t:"阶段 B · 数据（独占）",f:"",d:""},
+ {n:3,t:"0x0201 -> 0x0202 -> 0x0301 xN -> 0x0302",f:"",d:"擦净后立刻应答；数据阶段只写暂存区，无其他动作。"},
+ {k:"phase",t:"阶段 C · 校验",f:"",d:""},
+ {n:4,t:"0x0401 -> 0x0402 status=0",f:"",d:"长度断言 + 暂存区 SHA 比对。"},
+ {k:"phase info",t:"阶段 D · 搬运（独占）",f:"",d:"目标 S 不需要 UART 转发，改为把自己暂存区搬到 APP 区。"},
+ {n:5,t:"切片 ERASE",f:"[SUB] erase",d:"擦 S APP 区 0x01010000 起，每拍一扇区。"},
+ {n:6,t:"切片 COPY",f:"[SUB] copy",d:"暂存区 -> APP 区，每拍 1KB。"},
+ {n:7,t:"切片 VERIFY",f:"[SUB] verify",d:"逐段 memcmp 源区 vs APP 区。"},
+ {n:8,t:"完整性标记",f:"boot_app_integrity_mark",d:"写 magic 0x41505031。"},
+ {k:"phase ok",t:"阶段 E · 复位",f:"",d:""},
+ {n:9,t:"0x0502=0x00",f:"",d:"APPLYING 期间不消费 BLE 帧，上位机需重发 0x0501。"},
+ {n:10,t:"清标志 + 复位进新 APP",f:"ns_ble_adv_stop / rwip_reset / NVIC_SystemReset",d:"S 板自己复位断开，上位机重连探到 APP 模式 = 成功。"}
 ];
-const S=[
- {c:0,l:0,t:"选 S 镜像",f:".hex / .bin",d:"算 SHA256 与长度；HEX 基址 0x01010000。"},
- {c:1,l:0,t:"连接 / 进 boot",f:"53 A2 … F9 01",d:"APP 模式先写 PENDING + NVIC_SystemReset，S 板进 boot 广播。"},
- {c:2,l:1,t:"握手",f:"0x0102 maxpkt",d:"硬件码 J51VA-S。"},
- {c:3,l:0,t:"参数帧",f:"0x0201 · 38 B",d:"size + sha256 + pkt；S 板记录期望摘要。"},
- {c:4,l:1,t:"分片擦暂存区",f:"每拍 4 KB",d:"⚠️ 与 M 路径同一个竞态点：0x0202 必须等擦完再发。",k:"risk"},
- {c:5,l:1,t:"参数应答",f:"0x0202 status=0",d:"⚠️ 挂起到 erase done 后才发（修复方向）。",k:"risk"},
- {c:6,l:0,t:"发数据包",f:"0x0301 × N",d:"写 S 板暂存区 0x01030000。"},
- {c:7,l:1,t:"写暂存 + ACK",f:"0x0302 批量",d:"全 ACK 不等于全写对。",k:"risk"},
- {c:8,l:1,t:"实算 SHA",f:"0x0401 → 0x0402",d:"长度断言 + 摘要比对，通过后进 APPLYING。",k:"ok"},
- {c:9,l:1,t:"切片 ERASE",f:"[SUB] erase",d:"擦 S APP 区 0x01010000 起，每拍 1 扇区，中间让 rwip_schedule 跑。"},
- {c:10,l:1,t:"切片 COPY",f:"[SUB] copy",d:"暂存区 → APP 区，每拍 1 KB。不能整片拷贝，会阻塞 BLE 数秒断链。"},
- {c:11,l:1,t:"切片 VERIFY",f:"[SUB] verify",d:"逐段 memcmp 源区 vs APP 区，不一致即 apply 失败。",k:"ok"},
- {c:12,l:1,t:"完整性标记",f:"boot_app_integrity_mark",d:"写 integrity magic 0x41505031，下次启动快路径靠它决定能否跳 APP。",k:"ok"},
- {c:13,l:1,t:"完成应答",f:"0x0502 = 0x00",d:"APPLYING 期间不消费 BLE 帧，上位机必须重发 0x0501 才能拿到这个应答。",k:"ok"},
- {c:14,l:1,t:"清标志 + 复位",f:"adv_stop / rwip_reset",d:"清 PENDING → 关射频交还干净 → NVIC_SystemReset。NVIC 复位不动射频核，必须先 rwip_reset。"},
- {c:15,l:1,t:"新 APP 广播",f:"AIMTECH VHR",d:"S 板断开 BLE，上位机 waitReconnect 探到 APP 模式 = 成功。",k:"ok"}
+V.R=[
+ {k:"phase",t:"W515 IAP 参考（你原来的设计）",f:"bootloader.c · 命令 0x01~0x09",d:"状态机 IDLE -> ERASING -> PROGRAMMING -> VERIFYING -> SUCCESS。"},
+ {n:1,t:"CMD_ERASE_FLASH (0x04)",f:"flash_erase_pages(addr,size) -> ACK",d:"整段擦完才应答。擦除期间主机在等 ACK，一个数据包都不发。"},
+ {n:2,t:"CMD_WRITE_DATA (0x05) xN",f:"每包自带 32 位地址",d:"写成功才 ACK。期间没有任何擦除动作。"},
+ {n:3,t:"CMD_VERIFY_DATA (0x06)",f:"addr + size + CRC32",d:"单独一步算 CRC 与主机给的比，范围显式。"},
+ {n:4,t:"CMD_RESET_DEVICE (0x07)",f:"",d:"跳新 APP。"},
+ {k:"phase ok",t:"我们借鉴了什么、没改什么",f:"",d:""},
+ {n:5,t:"借鉴：交互方式",f:"",d:"擦是独立原子阶段、写是独立阶段、校验是独立阶段。阶段之间不并行，CPU 一次只干一类事。"},
+ {n:6,t:"借鉴：擦完才应答",f:"",d:"0x0102 先发 -> 原子擦除 -> 0x0202 才放行。不再边擦边收。"},
+ {n:7,t:"没改：协议帧",f:"",d:"EB90 帧、CRC8、0x0101~0x0502、SHA256、16B 硬件码、1024B UART 分包，全部保持。"},
+ {n:8,t:"没改：我们的优势",f:"",d:"参数帧一次给 size+sha+pkt（比参考独立擦除帧更紧凑）；暂存区让 M/S 共用一套收包逻辑。"},
+ {n:9,t:"prestart 位置的记录",f:"[BL] main prestart AFTER SHA",d:"原代码在 0x0202 之后立刻 prepare 让主控进 boot，与 BLE 传数据并行（省时间但 CPU 同时干两类事）。现在移到 SHA 通过之后串行化；日志保留，可确认动作确实发生。"}
 ];
-
-const W=152, H=64, X0=150, Y0=66, CW=172, CH=118;
-function render(nodes){
-  const cols=Math.max(...nodes.map(n=>n.c))+1;
-  const w=X0+cols*CW+60, h=Y0+LANES.length*CH+40;
-  let s=`<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" xmlns="http://www.w3.org/2000/svg">
-    <defs><marker id="ar" markerWidth="9" markerHeight="9" refX="8" refY="3" orient="auto">
-      <path d="M0,0 L0,6 L8,3 z" fill="#9aa89a"/></marker></defs>`;
-  LANES.forEach((ln,i)=>{
-    const y=Y0+i*CH-16;
-    s+=`<rect class="lanebg" x="0" y="${y}" width="${w}" height="${CH}" fill="${ln.c}"/>`;
-    s+=`<line class="grid" x1="0" y1="${y+CH}" x2="${w}" y2="${y+CH}"/>`;
-    s+=`<text class="lanelabel" x="16" y="${y+30}">${ln.n}</text>`;
-    s+=`<text class="lanesub" x="16" y="${y+48}">${ln.s}</text>`;
-  });
-  s+=`<line class="grid" x1="${X0-16}" y1="0" x2="${X0-16}" y2="${h}"/>`;
-  // 风险横幅
-  const risks=nodes.filter(n=>n.k==='risk');
-  if(risks.length){
-    const x1=X0+risks[0].c*CW-8, x2=X0+risks[risks.length-1].c*CW+W+8;
-    s+=`<rect class="banner" x="${x1}" y="12" width="${x2-x1}" height="24"/>`;
-    s+=`<text class="banner-t" x="${x1+10}" y="28">⚠ 风险窗口：暂存区擦除 / 参数应答 / 全 ACK 不等于全写对</text>`;
-  }
-  // 连线
-  for(let i=1;i<nodes.length;i++){
-    const a=nodes[i-1], b=nodes[i];
-    const ax=X0+a.c*CW+W, ay=Y0+a.l*CH+H/2;
-    const bx=X0+b.c*CW,   by=Y0+b.l*CH+H/2;
-    const mx=ax+(bx-ax)/2;
-    const risk=(a.k==='risk'||b.k==='risk')?'risk':'';
-    s+=`<path class="edge ${risk}" d="M${ax},${ay} H${mx} V${by} H${bx}"/>`;
-  }
-  // 节点
-  nodes.forEach((n,i)=>{
-    const x=X0+n.c*CW, y=Y0+n.l*CH;
-    const cls=n.k==='risk'?'risknode':(n.k==='ok'?'oknode':'');
-    const fill=n.k==='risk'?'#fff1e8':(n.k==='ok'?'#eaf6ee':'#ffffff');
-    const stroke=n.k==='risk'?'#c1440e':(n.k==='ok'?'#2e7d4f':'#8ea886');
-    s+=`<g class="node" data-i="${i}" transform="translate(${x},${y})">
-      <rect class="${cls}" width="${W}" height="${H}" fill="${fill}" stroke="${stroke}"/>
-      <text class="n" x="9" y="15">${String(i+1).padStart(2,'0')}</text>
-      <text class="t" x="9" y="33">${esc(n.t)}</text>
-      <text class="f" x="9" y="49">${esc(n.f)}</text>
-    </g>`;
-  });
-  s+=`</svg>`;
-  document.getElementById('stage').innerHTML=s;
-  document.getElementById('stage').scrollLeft=0;
-  document.querySelectorAll('.node').forEach(g=>{
-    g.onclick=()=>showD(nodes[+g.dataset.i]);
-  });
+function esc(s){return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;")}
+function show(x){const d=document.getElementById("d");d.querySelector("h3").textContent=x.t||x.k;d.querySelector("p").textContent=x.d||"";d.style.display="block"}
+function hide(){document.getElementById("d").style.display="none"}
+function render(v){
+ let h="";
+ for(const x of V[v]){
+  if(x.k){h+=`<div class="phasebar ${x.k.includes("risk")?"risk":""}">${esc(x.t)}</div>`;
+          h+=`<div class="card phase" onclick="show(V['${v}'].find(a=>a.t===this.querySelector('h3').textContent))"><h3>${esc(x.t)}</h3><div class="fr">${esc(x.f)}</div><p>${esc(x.d)}</p></div>`;continue}
+  const cls=x.k||"";
+  h+=`<div class="step"><div class="num ${cls}">${String(x.n).padStart(2,"0")}</div>`+
+     `<div class="card ${cls}" onclick="show(V['${v}'].find(a=>a.t===this.querySelector('h3').textContent))">`+
+     `<h3>${esc(x.t)}</h3><div class="fr">${esc(x.f)}</div><p>${esc(x.d)}</p></div></div>`;
+ }
+ document.getElementById("root").innerHTML=`<div class="view on">${h}</div>`;
 }
-function esc(t){return String(t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
-function showD(n){
-  const d=document.getElementById('detail');
-  d.querySelector('h3').textContent=n.t;
-  d.querySelector('.fr').textContent=n.f;
-  d.querySelector('p').textContent=n.d;
-  d.style.borderLeftColor=(n.k==='risk'?'#c1440e':(n.k==='ok'?'#2e7d4f':'#4b6b3c'));
-  d.style.display='block';
-}
-function hideD(){document.getElementById('detail').style.display='none'}
-
-const tabs=[...document.querySelectorAll('.tab')];
-function setView(v){
-  tabs.forEach(b=>b.classList.toggle('on',b.dataset.v===v));
-  const isCmp=(v==='C'||v==='P');
-  document.getElementById('stage').style.display=isCmp?'none':'block';
-  document.getElementById('cmpC').classList.toggle('on',v==='C');
-  document.getElementById('cmpP').classList.toggle('on',v==='P');
-  document.querySelector('.legend').style.display=isCmp?'none':'flex';
-  hideD();
-  if(!isCmp) render(v==='M'?M:S);
-}
-tabs.forEach(b=>b.onclick=()=>setView(b.dataset.v));
-setView('M');
+document.querySelectorAll(".tab").forEach(b=>b.onclick=()=>{
+ document.querySelectorAll(".tab").forEach(x=>x.classList.remove("on"));b.classList.add("on");
+ hide();render(b.dataset.v);window.scrollTo(0,0);
+});
+render("M");
 </script>
 </body>
 </html>
