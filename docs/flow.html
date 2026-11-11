@@ -1,9 +1,9 @@
-ï»¿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-<meta charset="UTF-8">
+<meta charset="GB18030">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>J51NG OTA æµç¨‹å›¾ Â· M / S åŒé“¾è·¯</title>
+<title>J51NG OTA Á÷³ÌÍ¼ ¡¤ M / S Ë«Á´Â·</title>
 <style>
   :root{
     --bg:#f5f6f2; --card:#fff; --ink:#1f2420; --muted:#6c756c;
@@ -72,121 +72,121 @@
 </head>
 <body>
 <header>
-  <h1>J51NG OTA Â· å‡çº§æµç¨‹å›¾</h1>
-  <p>ä¸Šä½æœº â†’ S è“ç‰™æ¿ï¼ˆæš‚å­˜/ä¸­è½¬ï¼‰ â†’ M ä¸»æŽ§ã€€Â·ã€€æ³³é“ = è§’è‰²ï¼Œæ¨ªå‘ = æ—¶é—´ã€€Â·ã€€ç‚¹å‡»ä»»æ„èŠ‚ç‚¹çœ‹è¯´æ˜Ž</p>
+  <h1>J51NG OTA ¡¤ Éý¼¶Á÷³ÌÍ¼</h1>
+  <p>ÉÏÎ»»ú ¡ú S À¶ÑÀ°å£¨ÔÝ´æ/ÖÐ×ª£© ¡ú M Ö÷¿Ø¡¡¡¤¡¡Ó¾µÀ = ½ÇÉ«£¬ºáÏò = Ê±¼ä¡¡¡¤¡¡µã»÷ÈÎÒâ½Úµã¿´ËµÃ÷</p>
 </header>
 
 <div class="tabs">
-  <button class="tab on" data-v="M">â‘  ä¸»æŽ§ M å‡çº§</button>
-  <button class="tab" data-v="S">â‘¡ è“ç‰™æ¿ S è‡ªå‡çº§</button>
-  <button class="tab" data-v="C">â‘¢ æ’ä»¶ vs ç½‘é¡µ / ç«žæ€</button>
-  <button class="tab" data-v="P">â‘£ Bootâ†”APP ç”µæºä¸Žæ ‡å¿—</button>
+  <button class="tab on" data-v="M">¢Ù Ö÷¿Ø M Éý¼¶</button>
+  <button class="tab" data-v="S">¢Ú À¶ÑÀ°å S ×ÔÉý¼¶</button>
+  <button class="tab" data-v="C">¢Û ²å¼þ vs ÍøÒ³ / ¾ºÌ¬</button>
+  <button class="tab" data-v="P">¢Ü Boot6Ç2APP µçÔ´Óë±êÖ¾</button>
 </div>
 
 <div class="wrap">
   <div class="bar">
     <div class="legend">
-      <span class="lg"><i class="dot" style="background:#dcebd0;border:1.5px solid #4b6b3c"></i>æ™®é€šæ­¥éª¤</span>
-      <span class="lg"><i class="dot" style="background:#eaf6ee;border:1.5px solid #2e7d4f"></i>æˆåŠŸåˆ¤æ®</span>
-      <span class="lg"><i class="dot" style="background:#fff1e8;border:1.5px dashed #c1440e"></i>é£Žé™© / ç«žæ€ç‚¹</span>
-      <span class="lg"><i class="dot" style="background:#9aa89a"></i>æŽ§åˆ¶æµ</span>
-      <span class="lg"><i class="dot" style="background:#c1440e"></i>é£Žé™©æµ</span>
+      <span class="lg"><i class="dot" style="background:#dcebd0;border:1.5px solid #4b6b3c"></i>ÆÕÍ¨²½Öè</span>
+      <span class="lg"><i class="dot" style="background:#eaf6ee;border:1.5px solid #2e7d4f"></i>³É¹¦ÅÐ¾Ý</span>
+      <span class="lg"><i class="dot" style="background:#fff1e8;border:1.5px dashed #c1440e"></i>·çÏÕ / ¾ºÌ¬µã</span>
+      <span class="lg"><i class="dot" style="background:#9aa89a"></i>¿ØÖÆÁ÷</span>
+      <span class="lg"><i class="dot" style="background:#c1440e"></i>·çÏÕÁ÷</span>
     </div>
-    <span class="hint">æ¨ªå‘å¯æ»šåŠ¨ Â· å•æ–‡ä»¶ç¦»çº¿å¯ç”¨</span>
+    <span class="hint">ºáÏò¿É¹ö¶¯ ¡¤ µ¥ÎÄ¼þÀëÏß¿ÉÓÃ</span>
   </div>
 
   <div class="stage" id="stage"></div>
 
   <div class="cmp" id="cmpC">
     <table>
-      <tr><th>é¡¹</th><th>æ¡Œé¢æ’ä»¶ ble_daemon.py</th><th>ç½‘é¡µ app.js</th></tr>
-      <tr><td class="k">BLE åŽç«¯</td><td>Python bleak / WinRT</td><td>Chrome Web Bluetooth</td></tr>
-      <tr><td class="k">åˆ†åŒ…ï¼ˆM é•œåƒï¼‰</td><td>128 B Ã— 816</td><td>228 B Ã— 458</td></tr>
-      <tr><td class="k">çª—å£ / é—´éš”</td><td>win=32ï¼Œæ¯ 4 åŒ… sleep 4 ms</td><td>win=32ï¼Œæ¯åŒ… sleep 4 ms</td></tr>
-      <tr><td class="k">æ•°æ®é˜¶æ®µ</td><td>~8 s</td><td>7.5 sï¼ˆæ›´å¿«ï¼‰</td></tr>
-      <tr><td class="k">M å®žæœºç»“æžœ</td><td>âœ… æˆåŠŸè¿‡ <code>0x1021 status=0</code> â†’ <code>0x0502=0x00</code></td><td>âŒ <code>0x0402=0x11</code> SHA å¤±è´¥</td></tr>
-      <tr><td class="k">å¤±è´¥è®°å½•</td><td>âš ï¸ æ—©å‰ <code>status=17</code> / å‚æ•°æ— åº”ç­”</td><td>âš ï¸ æ•°æ®å…¨ ACK ä½†æš‚å­˜åŒºå†…å®¹ä¸å¯¹</td></tr>
-      <tr><td class="k">åè®® / CRC / SHA</td><td colspan="2">å®Œå…¨ä¸€è‡´ï¼Œå·®å¼‚åªæœ‰<strong>èŠ‚å¥</strong></td></tr>
+      <tr><th>Ïî</th><th>×ÀÃæ²å¼þ ble_daemon.py</th><th>ÍøÒ³ app.js</th></tr>
+      <tr><td class="k">BLE ºó¶Ë</td><td>Python bleak / WinRT</td><td>Chrome Web Bluetooth</td></tr>
+      <tr><td class="k">·Ö°ü£¨M ¾µÏñ£©</td><td>128 B ¡Á 816</td><td>228 B ¡Á 458</td></tr>
+      <tr><td class="k">´°¿Ú / ¼ä¸ô</td><td>win=32£¬Ã¿ 4 °ü sleep 4 ms</td><td>win=32£¬Ã¿°ü sleep 4 ms</td></tr>
+      <tr><td class="k">Êý¾Ý½×¶Î</td><td>~8 s</td><td>7.5 s£¨¸ü¿ì£©</td></tr>
+      <tr><td class="k">M Êµ»ú½á¹û</td><td>7¼3 ³É¹¦¹ý <code>0x1021 status=0</code> ¡ú <code>0x0502=0x00</code></td><td>7Ã4 <code>0x0402=0x11</code> SHA Ê§°Ü</td></tr>
+      <tr><td class="k">Ê§°Ü¼ÇÂ¼</td><td>7²2„1‚5 ÔçÇ° <code>status=17</code> / ²ÎÊýÎÞÓ¦´ð</td><td>7²2„1‚5 Êý¾ÝÈ« ACK µ«ÔÝ´æÇøÄÚÈÝ²»¶Ô</td></tr>
+      <tr><td class="k">Ð­Òé / CRC / SHA</td><td colspan="2">ÍêÈ«Ò»ÖÂ£¬²îÒìÖ»ÓÐ<strong>½Ú×à</strong></td></tr>
     </table>
-    <div class="callout"><b>ç«žæ€æ ¹å› ï¼š</b>S æ¿ <code>0x0202</code> åœ¨æš‚å­˜åŒºè¿˜æ²¡æ“¦å®Œæ—¶å°±å‘å‡ºï¼Œä¸Šä½æœºç«‹åˆ»çŒ 458 åŒ…ï¼›
-      è€Œ <code>process()</code> æ“¦é™¤æœŸé—´ <code>return PENDING</code> ä¸å– BLE å¸§ â†’ æ•°æ®å¸§å †åœ¨ RX çŽ¯é‡Œè¢«ä¸¢ï¼Œ
-      æ‰¹é‡ ACK å´ç…§å‘ â†’ <b>ã€Œå…¨åŒ… ACKã€0 é‡ä¼ ã€ä½†æš‚å­˜åŒºæ˜¯æ—§æ•°æ®</b> â†’ å®žç®— SHA â‰  æœŸæœ›å€¼ã€‚
-      æ’ä»¶åŒ…æ›´å°æ›´æ…¢ã€ä¸” UART idle hook é‡Œé¢å¤–è·‘ BLE processï¼Œæ‰€ä»¥æ›´å®¹æ˜“è¿‡ï¼Œä½†ä¸æ˜¯é›¶æ¦‚çŽ‡ã€‚</div>
-    <div class="callout good"><b>ä¿®å¤æ–¹å‘ï¼ˆå·²ç¼–è¯‘æœªçƒ§ï¼‰ï¼š</b>æŠŠ <code>0x0202</code> æŒ‚èµ·åˆ° <code>erase done</code> ä¹‹åŽå†å‘ï¼›
-      æ“¦é™¤æœŸé—´ç”¨ peek åªæ”¾è¡ŒæŽ§åˆ¶å¸§ï¼Œæ•°æ®å¸§ç•™åœ¨çŽ¯é‡Œä¸æ¶ˆè´¹ã€‚ä¸»æœºæ”¶åˆ°åº”ç­”æ‰å¼€å§‹å‘æ•°æ®ï¼Œç«žæ€ä»Žæ—¶åºä¸Šæ¶ˆå¤±ã€‚</div>
+    <div class="callout"><b>¾ºÌ¬¸ùÒò£º</b>S °å <code>0x0202</code> ÔÚÔÝ´æÇø»¹Ã»²ÁÍêÊ±¾Í·¢³ö£¬ÉÏÎ»»úÁ¢¿Ì¹à 458 °ü£»
+      ¶ø <code>process()</code> ²Á³ýÆÚ¼ä <code>return PENDING</code> ²»È¡ BLE Ö¡ ¡ú Êý¾ÝÖ¡¶ÑÔÚ RX »·Àï±»¶ª£¬
+      ÅúÁ¿ ACK È´ÕÕ·¢ ¡ú <b>¡¸È«°ü ACK¡¢0 ÖØ´«¡¹µ«ÔÝ´æÇøÊÇ¾ÉÊý¾Ý</b> ¡ú ÊµËã SHA ¡Ù ÆÚÍûÖµ¡£
+      ²å¼þ°ü¸üÐ¡¸üÂý¡¢ÇÒ UART idle hook Àï¶îÍâÅÜ BLE process£¬ËùÒÔ¸üÈÝÒ×¹ý£¬µ«²»ÊÇÁã¸ÅÂÊ¡£</div>
+    <div class="callout good"><b>ÐÞ¸´·½Ïò£¨ÒÑ±àÒëÎ´ÉÕ£©£º</b>°Ñ <code>0x0202</code> ¹ÒÆðµ½ <code>erase done</code> Ö®ºóÔÙ·¢£»
+      ²Á³ýÆÚ¼äÓÃ peek Ö»·ÅÐÐ¿ØÖÆÖ¡£¬Êý¾ÝÖ¡ÁôÔÚ»·Àï²»Ïû·Ñ¡£Ö÷»úÊÕµ½Ó¦´ð²Å¿ªÊ¼·¢Êý¾Ý£¬¾ºÌ¬´ÓÊ±ÐòÉÏÏûÊ§¡£</div>
   </div>
 
   <div class="cmp" id="cmpP">
     <table>
-      <tr><th>çŽ¯èŠ‚</th><th>ä»£ç ä½ç½®</th><th>å¿…é¡»åšçš„äº‹</th></tr>
-      <tr><td class="k">M boot ç”µæº</td><td><code>m_boot io_init()</code></td><td><code>PD1</code> è‡ªä¿ç”µ + <code>PA11</code> è“ç‰™ä¾›ç”µï¼Œ<code>GPIO_BOP</code> å…¨éƒ¨æ‹‰é«˜ï¼›main() ç¬¬ä¸€æ¡</td></tr>
-      <tr><td class="k">S boot ç”µæº</td><td><code>power_gpio_init()</code></td><td><code>PB1</code> POWER + <code>PB12</code> EN2 éƒ½ <code>GPIO_SetBits</code></td></tr>
-      <tr><td class="k">S APP ç”µæº</td><td><code>Power_Gpio_Init()</code></td><td>å¿…é¡»ä¸Ž boot ä¸€è‡´æ‹‰é«˜ï¼›åŽŸæ¥ <code>POWER_OFF()</code> ä¸€è·³ APP å°±æ–­ç”µå˜ç –ï¼ˆå·²ä¿®ï¼‰</td></tr>
-      <tr><td class="k">APP â†’ Boot å‘½ä»¤</td><td><code>app_protocol.c</code></td><td><code>53 A2 04 00 FF 01 F9 01</code>ï¼šå†™ PENDING â†’ å›ž 0x54A1 â†’ 200 ms åˆ· BLE â†’ <code>NVIC_SystemReset()</code> å®Œæ•´å¤ä½</td></tr>
-      <tr><td class="k">å‡çº§æ ‡å¿—</td><td><code>0x0100FF00</code> word2</td><td><code>0xFFFFFFFF</code>=NONEï¼Œ<code>1</code>=PENDINGï¼›<b>å¿…é¡»å…ˆæ“¦é¡µå†å†™</b>ï¼Œå¦åˆ™ PGERR</td></tr>
-      <tr><td class="k">boot å¿«è·¯å¾„</td><td><code>s_boot main.c:206</code></td><td>åªæœ‰ã€ŒAPP åˆæ³• <b>ä¸”</b> flagâ‰ PENDINGã€æ‰è·³ APPï¼›å¦åˆ™ç•™ boot å¹¿æ’­</td></tr>
-      <tr><td class="k">è°ƒè¯• / é‡äº§</td><td><code>src/boot_log.h</code></td><td><code>BOOT_LOG_MODE</code>ï¼š0=é™éŸ³ï¼ˆçœ 6.8 KBï¼Œå½“å‰å€¼ï¼‰ï¼Œ1=å…¨é‡æ—¥å¿—</td></tr>
-      <tr><td class="k">ä¸€ä¸ªä¸­å¿ƒåŽŸåˆ™</td><td>BLE åè®®</td><td>è®¾å¤‡è¿žä¸Šä»»æ„ä¸­å¿ƒåŽ<strong>ä¸å†å¹¿æ’­</strong>ï¼›æ’ä»¶ / ç½‘é¡µ / æ‰‹æœºåŒä¸€æ—¶åˆ»åªèƒ½æœ‰ä¸€ä¸ª</td></tr>
+      <tr><th>»·½Ú</th><th>´úÂëÎ»ÖÃ</th><th>±ØÐë×öµÄÊÂ</th></tr>
+      <tr><td class="k">M boot µçÔ´</td><td><code>m_boot io_init()</code></td><td><code>PD1</code> ×Ô±£µç + <code>PA11</code> À¶ÑÀ¹©µç£¬<code>GPIO_BOP</code> È«²¿À­¸ß£»main() µÚÒ»Ìõ</td></tr>
+      <tr><td class="k">S boot µçÔ´</td><td><code>power_gpio_init()</code></td><td><code>PB1</code> POWER + <code>PB12</code> EN2 ¶¼ <code>GPIO_SetBits</code></td></tr>
+      <tr><td class="k">S APP µçÔ´</td><td><code>Power_Gpio_Init()</code></td><td>±ØÐëÓë boot Ò»ÖÂÀ­¸ß£»Ô­À´ <code>POWER_OFF()</code> Ò»Ìø APP ¾Í¶Ïµç±ä×©£¨ÒÑÐÞ£©</td></tr>
+      <tr><td class="k">APP ¡ú Boot ÃüÁî</td><td><code>app_protocol.c</code></td><td><code>53 A2 04 00 FF 01 F9 01</code>£ºÐ´ PENDING ¡ú »Ø 0x54A1 ¡ú 200 ms Ë¢ BLE ¡ú <code>NVIC_SystemReset()</code> ÍêÕû¸´Î»</td></tr>
+      <tr><td class="k">Éý¼¶±êÖ¾</td><td><code>0x0100FF00</code> word2</td><td><code>0xFFFFFFFF</code>=NONE£¬<code>1</code>=PENDING£»<b>±ØÐëÏÈ²ÁÒ³ÔÙÐ´</b>£¬·ñÔò PGERR</td></tr>
+      <tr><td class="k">boot ¿ìÂ·¾¶</td><td><code>s_boot main.c:206</code></td><td>Ö»ÓÐ¡¸APP ºÏ·¨ <b>ÇÒ</b> flag¡ÙPENDING¡¹²ÅÌø APP£»·ñÔòÁô boot ¹ã²¥</td></tr>
+      <tr><td class="k">µ÷ÊÔ / Á¿²ú</td><td><code>src/boot_log.h</code></td><td><code>BOOT_LOG_MODE</code>£º0=¾²Òô£¨Ê¡ 6.8 KB£¬µ±Ç°Öµ£©£¬1=È«Á¿ÈÕÖ¾</td></tr>
+      <tr><td class="k">Ò»¸öÖÐÐÄÔ­Ôò</td><td>BLE Ð­Òé</td><td>Éè±¸Á¬ÉÏÈÎÒâÖÐÐÄºó<strong>²»ÔÙ¹ã²¥</strong>£»²å¼þ / ÍøÒ³ / ÊÖ»úÍ¬Ò»Ê±¿ÌÖ»ÄÜÓÐÒ»¸ö</td></tr>
     </table>
-    <div class="callout"><b>å¤ä½åˆ¤æ®å‘ï¼š</b>åªåœ¨ <code>target==SUB</code> æ—¶å¤ä½ï¼Œä½† <code>reset_session()</code> ä¼šå…ˆæŠŠ target æ¸…æŽ‰
-      â†’ åˆ¤æ–­æ°¸è¿œä¸æˆç«‹ â†’ å‡çº§æˆåŠŸå´ä¸å¤ä½ã€‚æ­£ç¡®åšæ³•ï¼šåœ¨ç½® <code>reset_pending</code> æ—¶æŠŠç›®æ ‡å­˜è¿›ç‹¬ç«‹
-      <code>s_dispatch_target</code>ï¼Œmain ç”¨ getter è¯»å®ƒã€‚</div>
-    <div class="callout"><b>å®Œæˆåº”ç­”å‘ï¼š</b>APPLYING æœŸé—´ <code>process()</code> æå‰ returnï¼Œ<code>0x0501</code> è¿žè¯»éƒ½æ²¡è¯»ã€‚
-      ä¸Šä½æœºå¿…é¡»é‡å‘ï¼ˆæ’ä»¶ 2 sÃ—30ã€ç½‘é¡µ 1.5 sÃ—30ï¼‰ï¼Œç­‰ apply ç»“æŸå›ž BEACON æ‰è¢«å¤„ç†ã€‚</div>
+    <div class="callout"><b>¸´Î»ÅÐ¾Ý¿Ó£º</b>Ö»ÔÚ <code>target==SUB</code> Ê±¸´Î»£¬µ« <code>reset_session()</code> »áÏÈ°Ñ target Çåµô
+      ¡ú ÅÐ¶ÏÓÀÔ¶²»³ÉÁ¢ ¡ú Éý¼¶³É¹¦È´²»¸´Î»¡£ÕýÈ·×ö·¨£ºÔÚÖÃ <code>reset_pending</code> Ê±°ÑÄ¿±ê´æ½ø¶ÀÁ¢
+      <code>s_dispatch_target</code>£¬main ÓÃ getter ¶ÁËü¡£</div>
+    <div class="callout"><b>Íê³ÉÓ¦´ð¿Ó£º</b>APPLYING ÆÚ¼ä <code>process()</code> ÌáÇ° return£¬<code>0x0501</code> Á¬¶Á¶¼Ã»¶Á¡£
+      ÉÏÎ»»ú±ØÐëÖØ·¢£¨²å¼þ 2 s¡Á30¡¢ÍøÒ³ 1.5 s¡Á30£©£¬µÈ apply ½áÊø»Ø BEACON ²Å±»´¦Àí¡£</div>
   </div>
 </div>
 
-<div id="detail"><span class="x" onclick="hideD()">âœ•</span><h3></h3><div class="fr"></div><p></p></div>
+<div id="detail"><span class="x" onclick="hideD()">7½9</span><h3></h3><div class="fr"></div><p></p></div>
 
 <footer>
-  å†»ç»“åŸºçº¿ 2026-11-11 Â· é…å¥—æ–‡æ¡£ï¼š01-overview / 02-flow-M / 03-flow-S / 04-boot-app-mode / 05-host-diff-and-race / 06-protocol-frames / 07-verification-log
+  ¶³½á»ùÏß 2026-11-11 ¡¤ ÅäÌ×ÎÄµµ£º01-overview / 02-flow-M / 03-flow-S / 04-boot-app-mode / 05-host-diff-and-race / 06-protocol-frames / 07-verification-log
 </footer>
 
 <script>
-/* ---------- æ•°æ®ï¼šlane 0=ä¸Šä½æœº 1=Sè“ç‰™æ¿ 2=Sâ†”M UART 3=Mä¸»æŽ§ ---------- */
+/* ---------- Êý¾Ý£ºlane 0=ÉÏÎ»»ú 1=SÀ¶ÑÀ°å 2=S6Ç2M UART 3=MÖ÷¿Ø ---------- */
 const LANES=[
-  {n:"ä¸Šä½æœº",    s:"PC / æµè§ˆå™¨ Â· å”¯ä¸€ BLE ä¸­å¿ƒ", c:"var(--lane0)"},
-  {n:"S è“ç‰™æ¿",  s:"N32WB031 Â· BLE ä»Žæœº + æš‚å­˜ + ä¸­è½¬", c:"var(--lane1)"},
-  {n:"Sâ†”M UART",  s:"0x10xx å¸§ Â· å…±ç”¨çº¿ï¼Œå‹¿æ’ CH340", c:"var(--lane2)"},
-  {n:"M ä¸»æŽ§",    s:"GD32F303CB Â· UART ä»Žæœº", c:"var(--lane3)"}
+  {n:"ÉÏÎ»»ú",    s:"PC / ä¯ÀÀÆ÷ ¡¤ Î¨Ò» BLE ÖÐÐÄ", c:"var(--lane0)"},
+  {n:"S À¶ÑÀ°å",  s:"N32WB031 ¡¤ BLE ´Ó»ú + ÔÝ´æ + ÖÐ×ª", c:"var(--lane1)"},
+  {n:"S6Ç2M UART",  s:"0x10xx Ö¡ ¡¤ ¹²ÓÃÏß£¬Îð²å CH340", c:"var(--lane2)"},
+  {n:"M Ö÷¿Ø",    s:"GD32F303CB ¡¤ UART ´Ó»ú", c:"var(--lane3)"}
 ];
 const M=[
- {c:0,l:0,t:"é€‰ M é•œåƒ",f:".hex / .bin",d:"ç®— SHA256 ä¸Žé•¿åº¦ï¼›HEX æŒ‰åŸºå€ 0x08002800 å±•å¼€ã€‚åº“é‡Œ index.json çš„ SHA æ˜¯æ—§å€¼ï¼Œä¸Šä½æœºçŽ°åœºé‡ç®—ã€‚"},
- {c:1,l:0,t:"è¿žæŽ¥ / æŽ¢æ¨¡å¼",f:"0x0101 â†’ 0x0102",d:"æœ‰åº”ç­”=å·²åœ¨ bootï¼›æ— åº”ç­”=åœ¨ APPï¼Œå…ˆå‘ 53 A2 04 00 FF 01 F9 01 è®©å…¶å†™ PENDING å¹¶å¤ä½ã€‚"},
- {c:2,l:1,t:"æ¡æ‰‹åº”ç­”",f:"0x0102 maxpkt=228",d:"è®¾å¤‡è¿”å›žæœ€å¤§åŒ…é•¿ã€‚æ’ä»¶å– 128 Bï¼Œç½‘é¡µå– 228 Bï¼ˆpkt & ~3 å¯¹é½ï¼‰ã€‚"},
- {c:3,l:0,t:"å‚æ•°å¸§",f:"0x0201 Â· 38 B",d:"size(4) + sha256(32) + pkt(2)ã€‚S æ¿æŠŠ sha256 å­˜ä¸º expected_sha256ï¼Œ0x0401 é‡Œå†å¸¦çš„ SHA ä¼šè¢«å¿½ç•¥ã€‚"},
- {c:4,l:1,t:"åˆ†ç‰‡æ“¦æš‚å­˜åŒº",f:"æ¯æ‹ 4 KB",d:"âš ï¸ é£Žé™©ç‚¹ï¼šæ“¦é™¤æœŸé—´ process() åŽŸæ¥ç›´æŽ¥ returnï¼Œä¸å–ä»»ä½• BLE å¸§ã€‚æš‚å­˜åŒºåŸºå€ 0x01030000ã€‚",k:"risk"},
- {c:5,l:1,t:"å‚æ•°åº”ç­”",f:"0x0202 status=0",d:"âš ï¸ ç«žæ€æ ¸å¿ƒï¼šåŽŸæ¥æ“¦é™¤æ²¡å®Œæˆå°±å‘ï¼Œä¸Šä½æœºç«‹åˆ»çŒæ•°æ® â†’ å†™è¿›æœªæ“¦é™¤åŒº / å¸§è¢«ä¸¢ã€‚ä¿®å¤ï¼šæŒ‚èµ·åˆ° erase done åŽæ‰å‘ã€‚",k:"risk"},
- {c:6,l:0,t:"å‘æ•°æ®åŒ…",f:"0x0301 Ã— N",d:"seq(2)+total(2)+len(2)+data+CRC8ã€‚win=32ï¼›æ’ä»¶ 128 BÃ—816ï¼Œç½‘é¡µ 228 BÃ—458ã€‚"},
- {c:7,l:1,t:"å†™æš‚å­˜ + ACK",f:"0x0302 æ‰¹é‡",d:"æ‰¹é‡ç¼“å­˜ 4KB åŽå†™ flashï¼Œæ¯ 8 åŒ…å›žä¸€æ¬¡ ACKã€‚âš ï¸ å…¨ ACK â‰  å…¨å†™å¯¹ï¼Œå¿…é¡»çœ‹ flash API è¿”å›žå€¼ã€‚",k:"risk"},
- {c:8,l:1,t:"å®žç®—æš‚å­˜ SHA",f:"boot_flash_compute_sha256",d:"å¯¹æš‚å­˜åŒº [base, written) å®žç®—ï¼›æ–­è¨€ written == firmware_total_size åŽå†æ¯”æ‘˜è¦ã€‚"},
- {c:9,l:0,t:"SHA è¯·æ±‚",f:"0x0401",d:"payload å¸¦ SHAï¼Œä½†è®¾å¤‡å¿½ç•¥ï¼Œç”¨çš„æ˜¯ 0x0201 å­˜ä¸‹çš„æœŸæœ›å€¼ã€‚"},
- {c:10,l:1,t:"SHA åº”ç­”",f:"0x0402 status=0",d:"0x00=æš‚å­˜åŒºæ ¡éªŒé€šè¿‡ï¼›0x11=SHA_FAILï¼ˆç½‘é¡µæœ¬æ¬¡å°±å¡åœ¨è¿™é‡Œï¼Œå®žç®— 3c703926â€¦ â‰  æœŸæœ› 11a8f0f2â€¦ï¼‰ã€‚",k:"ok"},
- {c:11,l:2,t:"è®©ä¸»æŽ§è¿› boot",f:"0x1000 / 0x1001 / 0x1002",d:"ENTER_BL â†’ ä¸»æŽ§ announce ready=1 â†’ æŠŠ version+SHA äº¤ç»™ä¸»æŽ§ã€‚å…±ç”¨ UARTï¼ŒPC çš„ CH340 å¿…é¡»æ‹”æŽ‰ã€‚"},
- {c:12,l:3,t:"å†™ä¸»æŽ§ APP åŒº",f:"0x1011 Ã— 102",d:"S æ¿ä»Žæš‚å­˜åŒºæŒ‰ pkt_index*1024 è¯»ï¼Œæ¯åŒ…æœ€å¤š 1024 Bã€‚ä¸»æŽ§ç”¨ç´¯è®¡ written_offset å†™ 0x08002800ï¼Œä¸å†ç”¨ seq*1024 æŽ¨ç®—ã€‚"},
- {c:13,l:3,t:"ä¸»æŽ§å›žæŠ¥",f:"0x1012 / 0x1021",d:"é€åŒ… ACK å¿…é¡»åªåœ¨æ“¦/å†™æˆåŠŸåŽå‘ï¼›æœ€åŽä¸€åŒ…åŽç®— BL_SHA256_Computeã€‚0x1021 status=0 æ‰æ˜¯ä¸»æŽ§ SHA é€šè¿‡ã€‚",k:"ok"},
- {c:14,l:2,t:"å®ŒæˆæŒ‡ä»¤",f:"0xFF00",d:"S æ¿æ”¶åˆ° 0x1021 status=0 åŽå‘å®Œæˆï¼Œä¸»æŽ§æ›´æ–° boot_data å¹¶è·³æ–° APPã€‚"},
- {c:15,l:1,t:"å®Œæˆåº”ç­”",f:"0x0502 = 0x00",d:"apply æˆåŠŸåŽå›žä¸Šä½æœºã€‚è¯­ä¹‰æ˜¯ã€Œåº”ç”¨ç»“æžœã€ï¼Œä¸æ˜¯ã€Œæ”¶åˆ°ã€ã€‚",k:"ok"},
- {c:16,l:3,t:"ä¸»æŽ§è·³æ–° APP",f:"jump_to_application",d:"boot_data æ›´æ–°ç‰ˆæœ¬/é•¿åº¦/SHAï¼Œæ ¡éªŒ SP/PC åŽè·³è½¬ã€‚",k:"ok"},
- {c:17,l:1,t:"S æ¿ç•™åœ¨ boot",f:"ä¸å¤ä½ / ä¸æ–­é“¾",d:"âš ï¸ åªæœ‰ dispatch_target==SUB æ‰å¤ä½ã€‚ç»™ä¸»æŽ§å‡çº§æ—¶ S æ¿å›ºä»¶æ²¡å˜ï¼ŒåŽŸåœ°é‡æ–°å¾…å‘½ç»§ç»­å¹¿æ’­ï¼Œä¸Šä½æœºæ— éœ€é‡è¿žã€‚",k:"ok"}
+ {c:0,l:0,t:"Ñ¡ M ¾µÏñ",f:".hex / .bin",d:"Ëã SHA256 Óë³¤¶È£»HEX °´»ùÖ· 0x08002800 Õ¹¿ª¡£¿âÀï index.json µÄ SHA ÊÇ¾ÉÖµ£¬ÉÏÎ»»úÏÖ³¡ÖØËã¡£"},
+ {c:1,l:0,t:"Á¬½Ó / Ì½Ä£Ê½",f:"0x0101 ¡ú 0x0102",d:"ÓÐÓ¦´ð=ÒÑÔÚ boot£»ÎÞÓ¦´ð=ÔÚ APP£¬ÏÈ·¢ 53 A2 04 00 FF 01 F9 01 ÈÃÆäÐ´ PENDING ²¢¸´Î»¡£"},
+ {c:2,l:1,t:"ÎÕÊÖÓ¦´ð",f:"0x0102 maxpkt=228",d:"Éè±¸·µ»Ø×î´ó°ü³¤¡£²å¼þÈ¡ 128 B£¬ÍøÒ³È¡ 228 B£¨pkt & ~3 ¶ÔÆë£©¡£"},
+ {c:3,l:0,t:"²ÎÊýÖ¡",f:"0x0201 ¡¤ 38 B",d:"size(4) + sha256(32) + pkt(2)¡£S °å°Ñ sha256 ´æÎª expected_sha256£¬0x0401 ÀïÔÙ´øµÄ SHA »á±»ºöÂÔ¡£"},
+ {c:4,l:1,t:"·ÖÆ¬²ÁÔÝ´æÇø",f:"Ã¿ÅÄ 4 KB",d:"7²2„1‚5 ·çÏÕµã£º²Á³ýÆÚ¼ä process() Ô­À´Ö±½Ó return£¬²»È¡ÈÎºÎ BLE Ö¡¡£ÔÝ´æÇø»ùÖ· 0x01030000¡£",k:"risk"},
+ {c:5,l:1,t:"²ÎÊýÓ¦´ð",f:"0x0202 status=0",d:"7²2„1‚5 ¾ºÌ¬ºËÐÄ£ºÔ­À´²Á³ýÃ»Íê³É¾Í·¢£¬ÉÏÎ»»úÁ¢¿Ì¹àÊý¾Ý ¡ú Ð´½øÎ´²Á³ýÇø / Ö¡±»¶ª¡£ÐÞ¸´£º¹ÒÆðµ½ erase done ºó²Å·¢¡£",k:"risk"},
+ {c:6,l:0,t:"·¢Êý¾Ý°ü",f:"0x0301 ¡Á N",d:"seq(2)+total(2)+len(2)+data+CRC8¡£win=32£»²å¼þ 128 B¡Á816£¬ÍøÒ³ 228 B¡Á458¡£"},
+ {c:7,l:1,t:"Ð´ÔÝ´æ + ACK",f:"0x0302 ÅúÁ¿",d:"ÅúÁ¿»º´æ 4KB ºóÐ´ flash£¬Ã¿ 8 °ü»ØÒ»´Î ACK¡£7²2„1‚5 È« ACK ¡Ù È«Ð´¶Ô£¬±ØÐë¿´ flash API ·µ»ØÖµ¡£",k:"risk"},
+ {c:8,l:1,t:"ÊµËãÔÝ´æ SHA",f:"boot_flash_compute_sha256",d:"¶ÔÔÝ´æÇø [base, written) ÊµËã£»¶ÏÑÔ written == firmware_total_size ºóÔÙ±ÈÕªÒª¡£"},
+ {c:9,l:0,t:"SHA ÇëÇó",f:"0x0401",d:"payload ´ø SHA£¬µ«Éè±¸ºöÂÔ£¬ÓÃµÄÊÇ 0x0201 ´æÏÂµÄÆÚÍûÖµ¡£"},
+ {c:10,l:1,t:"SHA Ó¦´ð",f:"0x0402 status=0",d:"0x00=ÔÝ´æÇøÐ£ÑéÍ¨¹ý£»0x11=SHA_FAIL£¨ÍøÒ³±¾´Î¾Í¿¨ÔÚÕâÀï£¬ÊµËã 3c703926¡­ ¡Ù ÆÚÍû 11a8f0f2¡­£©¡£",k:"ok"},
+ {c:11,l:2,t:"ÈÃÖ÷¿Ø½ø boot",f:"0x1000 / 0x1001 / 0x1002",d:"ENTER_BL ¡ú Ö÷¿Ø announce ready=1 ¡ú °Ñ version+SHA ½»¸øÖ÷¿Ø¡£¹²ÓÃ UART£¬PC µÄ CH340 ±ØÐë°Îµô¡£"},
+ {c:12,l:3,t:"Ð´Ö÷¿Ø APP Çø",f:"0x1011 ¡Á 102",d:"S °å´ÓÔÝ´æÇø°´ pkt_index*1024 ¶Á£¬Ã¿°ü×î¶à 1024 B¡£Ö÷¿ØÓÃÀÛ¼Æ written_offset Ð´ 0x08002800£¬²»ÔÙÓÃ seq*1024 ÍÆËã¡£"},
+ {c:13,l:3,t:"Ö÷¿Ø»Ø±¨",f:"0x1012 / 0x1021",d:"Öð°ü ACK ±ØÐëÖ»ÔÚ²Á/Ð´³É¹¦ºó·¢£»×îºóÒ»°üºóËã BL_SHA256_Compute¡£0x1021 status=0 ²ÅÊÇÖ÷¿Ø SHA Í¨¹ý¡£",k:"ok"},
+ {c:14,l:2,t:"Íê³ÉÖ¸Áî",f:"0xFF00",d:"S °åÊÕµ½ 0x1021 status=0 ºó·¢Íê³É£¬Ö÷¿Ø¸üÐÂ boot_data ²¢ÌøÐÂ APP¡£"},
+ {c:15,l:1,t:"Íê³ÉÓ¦´ð",f:"0x0502 = 0x00",d:"apply ³É¹¦ºó»ØÉÏÎ»»ú¡£ÓïÒåÊÇ¡¸Ó¦ÓÃ½á¹û¡¹£¬²»ÊÇ¡¸ÊÕµ½¡¹¡£",k:"ok"},
+ {c:16,l:3,t:"Ö÷¿ØÌøÐÂ APP",f:"jump_to_application",d:"boot_data ¸üÐÂ°æ±¾/³¤¶È/SHA£¬Ð£Ñé SP/PC ºóÌø×ª¡£",k:"ok"},
+ {c:17,l:1,t:"S °åÁôÔÚ boot",f:"²»¸´Î» / ²»¶ÏÁ´",d:"7²2„1‚5 Ö»ÓÐ dispatch_target==SUB ²Å¸´Î»¡£¸øÖ÷¿ØÉý¼¶Ê± S °å¹Ì¼þÃ»±ä£¬Ô­µØÖØÐÂ´ýÃü¼ÌÐø¹ã²¥£¬ÉÏÎ»»úÎÞÐèÖØÁ¬¡£",k:"ok"}
 ];
 const S=[
- {c:0,l:0,t:"é€‰ S é•œåƒ",f:".hex / .bin",d:"ç®— SHA256 ä¸Žé•¿åº¦ï¼›HEX åŸºå€ 0x01010000ã€‚"},
- {c:1,l:0,t:"è¿žæŽ¥ / è¿› boot",f:"53 A2 â€¦ F9 01",d:"APP æ¨¡å¼å…ˆå†™ PENDING + NVIC_SystemResetï¼ŒS æ¿è¿› boot å¹¿æ’­ã€‚"},
- {c:2,l:1,t:"æ¡æ‰‹",f:"0x0102 maxpkt",d:"ç¡¬ä»¶ç  J51VA-Sã€‚"},
- {c:3,l:0,t:"å‚æ•°å¸§",f:"0x0201 Â· 38 B",d:"size + sha256 + pktï¼›S æ¿è®°å½•æœŸæœ›æ‘˜è¦ã€‚"},
- {c:4,l:1,t:"åˆ†ç‰‡æ“¦æš‚å­˜åŒº",f:"æ¯æ‹ 4 KB",d:"âš ï¸ ä¸Ž M è·¯å¾„åŒä¸€ä¸ªç«žæ€ç‚¹ï¼š0x0202 å¿…é¡»ç­‰æ“¦å®Œå†å‘ã€‚",k:"risk"},
- {c:5,l:1,t:"å‚æ•°åº”ç­”",f:"0x0202 status=0",d:"âš ï¸ æŒ‚èµ·åˆ° erase done åŽæ‰å‘ï¼ˆä¿®å¤æ–¹å‘ï¼‰ã€‚",k:"risk"},
- {c:6,l:0,t:"å‘æ•°æ®åŒ…",f:"0x0301 Ã— N",d:"å†™ S æ¿æš‚å­˜åŒº 0x01030000ã€‚"},
- {c:7,l:1,t:"å†™æš‚å­˜ + ACK",f:"0x0302 æ‰¹é‡",d:"å…¨ ACK ä¸ç­‰äºŽå…¨å†™å¯¹ã€‚",k:"risk"},
- {c:8,l:1,t:"å®žç®— SHA",f:"0x0401 â†’ 0x0402",d:"é•¿åº¦æ–­è¨€ + æ‘˜è¦æ¯”å¯¹ï¼Œé€šè¿‡åŽè¿› APPLYINGã€‚",k:"ok"},
- {c:9,l:1,t:"åˆ‡ç‰‡ ERASE",f:"[SUB] erase",d:"æ“¦ S APP åŒº 0x01010000 èµ·ï¼Œæ¯æ‹ 1 æ‰‡åŒºï¼Œä¸­é—´è®© rwip_schedule è·‘ã€‚"},
- {c:10,l:1,t:"åˆ‡ç‰‡ COPY",f:"[SUB] copy",d:"æš‚å­˜åŒº â†’ APP åŒºï¼Œæ¯æ‹ 1 KBã€‚ä¸èƒ½æ•´ç‰‡æ‹·è´ï¼Œä¼šé˜»å¡ž BLE æ•°ç§’æ–­é“¾ã€‚"},
- {c:11,l:1,t:"åˆ‡ç‰‡ VERIFY",f:"[SUB] verify",d:"é€æ®µ memcmp æºåŒº vs APP åŒºï¼Œä¸ä¸€è‡´å³ apply å¤±è´¥ã€‚",k:"ok"},
- {c:12,l:1,t:"å®Œæ•´æ€§æ ‡è®°",f:"boot_app_integrity_mark",d:"å†™ integrity magic 0x41505031ï¼Œä¸‹æ¬¡å¯åŠ¨å¿«è·¯å¾„é å®ƒå†³å®šèƒ½å¦è·³ APPã€‚",k:"ok"},
- {c:13,l:1,t:"å®Œæˆåº”ç­”",f:"0x0502 = 0x00",d:"APPLYING æœŸé—´ä¸æ¶ˆè´¹ BLE å¸§ï¼Œä¸Šä½æœºå¿…é¡»é‡å‘ 0x0501 æ‰èƒ½æ‹¿åˆ°è¿™ä¸ªåº”ç­”ã€‚",k:"ok"},
- {c:14,l:1,t:"æ¸…æ ‡å¿— + å¤ä½",f:"adv_stop / rwip_reset",d:"æ¸… PENDING â†’ å…³å°„é¢‘äº¤è¿˜å¹²å‡€ â†’ NVIC_SystemResetã€‚NVIC å¤ä½ä¸åŠ¨å°„é¢‘æ ¸ï¼Œå¿…é¡»å…ˆ rwip_resetã€‚"},
- {c:15,l:1,t:"æ–° APP å¹¿æ’­",f:"AIMTECH VHR",d:"S æ¿æ–­å¼€ BLEï¼Œä¸Šä½æœº waitReconnect æŽ¢åˆ° APP æ¨¡å¼ = æˆåŠŸã€‚",k:"ok"}
+ {c:0,l:0,t:"Ñ¡ S ¾µÏñ",f:".hex / .bin",d:"Ëã SHA256 Óë³¤¶È£»HEX »ùÖ· 0x01010000¡£"},
+ {c:1,l:0,t:"Á¬½Ó / ½ø boot",f:"53 A2 ¡­ F9 01",d:"APP Ä£Ê½ÏÈÐ´ PENDING + NVIC_SystemReset£¬S °å½ø boot ¹ã²¥¡£"},
+ {c:2,l:1,t:"ÎÕÊÖ",f:"0x0102 maxpkt",d:"Ó²¼þÂë J51VA-S¡£"},
+ {c:3,l:0,t:"²ÎÊýÖ¡",f:"0x0201 ¡¤ 38 B",d:"size + sha256 + pkt£»S °å¼ÇÂ¼ÆÚÍûÕªÒª¡£"},
+ {c:4,l:1,t:"·ÖÆ¬²ÁÔÝ´æÇø",f:"Ã¿ÅÄ 4 KB",d:"7²2„1‚5 Óë M Â·¾¶Í¬Ò»¸ö¾ºÌ¬µã£º0x0202 ±ØÐëµÈ²ÁÍêÔÙ·¢¡£",k:"risk"},
+ {c:5,l:1,t:"²ÎÊýÓ¦´ð",f:"0x0202 status=0",d:"7²2„1‚5 ¹ÒÆðµ½ erase done ºó²Å·¢£¨ÐÞ¸´·½Ïò£©¡£",k:"risk"},
+ {c:6,l:0,t:"·¢Êý¾Ý°ü",f:"0x0301 ¡Á N",d:"Ð´ S °åÔÝ´æÇø 0x01030000¡£"},
+ {c:7,l:1,t:"Ð´ÔÝ´æ + ACK",f:"0x0302 ÅúÁ¿",d:"È« ACK ²»µÈÓÚÈ«Ð´¶Ô¡£",k:"risk"},
+ {c:8,l:1,t:"ÊµËã SHA",f:"0x0401 ¡ú 0x0402",d:"³¤¶È¶ÏÑÔ + ÕªÒª±È¶Ô£¬Í¨¹ýºó½ø APPLYING¡£",k:"ok"},
+ {c:9,l:1,t:"ÇÐÆ¬ ERASE",f:"[SUB] erase",d:"²Á S APP Çø 0x01010000 Æð£¬Ã¿ÅÄ 1 ÉÈÇø£¬ÖÐ¼äÈÃ rwip_schedule ÅÜ¡£"},
+ {c:10,l:1,t:"ÇÐÆ¬ COPY",f:"[SUB] copy",d:"ÔÝ´æÇø ¡ú APP Çø£¬Ã¿ÅÄ 1 KB¡£²»ÄÜÕûÆ¬¿½±´£¬»á×èÈû BLE ÊýÃë¶ÏÁ´¡£"},
+ {c:11,l:1,t:"ÇÐÆ¬ VERIFY",f:"[SUB] verify",d:"Öð¶Î memcmp Ô´Çø vs APP Çø£¬²»Ò»ÖÂ¼´ apply Ê§°Ü¡£",k:"ok"},
+ {c:12,l:1,t:"ÍêÕûÐÔ±ê¼Ç",f:"boot_app_integrity_mark",d:"Ð´ integrity magic 0x41505031£¬ÏÂ´ÎÆô¶¯¿ìÂ·¾¶¿¿Ëü¾ö¶¨ÄÜ·ñÌø APP¡£",k:"ok"},
+ {c:13,l:1,t:"Íê³ÉÓ¦´ð",f:"0x0502 = 0x00",d:"APPLYING ÆÚ¼ä²»Ïû·Ñ BLE Ö¡£¬ÉÏÎ»»ú±ØÐëÖØ·¢ 0x0501 ²ÅÄÜÄÃµ½Õâ¸öÓ¦´ð¡£",k:"ok"},
+ {c:14,l:1,t:"Çå±êÖ¾ + ¸´Î»",f:"adv_stop / rwip_reset",d:"Çå PENDING ¡ú ¹ØÉäÆµ½»»¹¸É¾» ¡ú NVIC_SystemReset¡£NVIC ¸´Î»²»¶¯ÉäÆµºË£¬±ØÐëÏÈ rwip_reset¡£"},
+ {c:15,l:1,t:"ÐÂ APP ¹ã²¥",f:"AIMTECH VHR",d:"S °å¶Ï¿ª BLE£¬ÉÏÎ»»ú waitReconnect Ì½µ½ APP Ä£Ê½ = ³É¹¦¡£",k:"ok"}
 ];
 
 const W=152, H=64, X0=150, Y0=66, CW=172, CH=118;
@@ -204,14 +204,14 @@ function render(nodes){
     s+=`<text class="lanesub" x="16" y="${y+48}">${ln.s}</text>`;
   });
   s+=`<line class="grid" x1="${X0-16}" y1="0" x2="${X0-16}" y2="${h}"/>`;
-  // é£Žé™©æ¨ªå¹…
+  // ·çÏÕºá·ù
   const risks=nodes.filter(n=>n.k==='risk');
   if(risks.length){
     const x1=X0+risks[0].c*CW-8, x2=X0+risks[risks.length-1].c*CW+W+8;
     s+=`<rect class="banner" x="${x1}" y="12" width="${x2-x1}" height="24"/>`;
-    s+=`<text class="banner-t" x="${x1+10}" y="28">âš  é£Žé™©çª—å£ï¼šæš‚å­˜åŒºæ“¦é™¤ / å‚æ•°åº”ç­” / å…¨ ACK ä¸ç­‰äºŽå…¨å†™å¯¹</text>`;
+    s+=`<text class="banner-t" x="${x1+10}" y="28">7²2 ·çÏÕ´°¿Ú£ºÔÝ´æÇø²Á³ý / ²ÎÊýÓ¦´ð / È« ACK ²»µÈÓÚÈ«Ð´¶Ô</text>`;
   }
-  // è¿žçº¿
+  // Á¬Ïß
   for(let i=1;i<nodes.length;i++){
     const a=nodes[i-1], b=nodes[i];
     const ax=X0+a.c*CW+W, ay=Y0+a.l*CH+H/2;
@@ -220,7 +220,7 @@ function render(nodes){
     const risk=(a.k==='risk'||b.k==='risk')?'risk':'';
     s+=`<path class="edge ${risk}" d="M${ax},${ay} H${mx} V${by} H${bx}"/>`;
   }
-  // èŠ‚ç‚¹
+  // ½Úµã
   nodes.forEach((n,i)=>{
     const x=X0+n.c*CW, y=Y0+n.l*CH;
     const cls=n.k==='risk'?'risknode':(n.k==='ok'?'oknode':'');
