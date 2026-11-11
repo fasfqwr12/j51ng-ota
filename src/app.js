@@ -747,12 +747,65 @@ window.ota = {
   },
   async scanAndConnect(maxMs=30000){
     const t0=performance.now(); let n=0;
+    /* 已经连着同一个中心时绝不 re-requestDevice：BLE 从机连上后不再广播，
+       重复请求只会让 chooser 空列表或把现有连接踢掉。直接复用现有连接。 */
+    if(device && device.gatt && device.gatt.connected && chW && chN){
+      const m = await probeModeOnly(1200);
+      log(`复用现有连接（${device.name||"AIMTECH VHR"}）→ ${m==="boot"?"Boot":"APP"}`,"ok");
+      setBadge(m); return m;
+    }
+    /* 已授权设备：用 getDevices() 直接连，不弹 chooser */
+    if(navigator.bluetooth.getDevices){
+      try{
+        const devs = await navigator.bluetooth.getDevices();
+        const d = devs.find(x=>/AIMTECH|J51NG/i.test(x.name||"")) || devs[0];
+        if(d){
+          device = d;
+          device.addEventListener("gattserverdisconnected", onDisconnect);
+          await gatt(8000);
+          const m = await probeModeOnly(1500);
+          setBadge(m);
+          log(`自动连接已授权设备 ${device.name} → ${m}`,"ok");
+          return m;
+        }
+      }catch(e){ log(`已授权直连失败：${e.message}`,"dim"); }
+    }
+    /* 最后才按名字请求（需要用户手势；由 UI 按钮触发） */
     while(performance.now()-t0<maxMs){
       n++;
       try{ await gatt(1500); const m=await probeModeOnly(1000); log(`扫描成功（第 ${n} 次，${((performance.now()-t0)/1000).toFixed(1)} s）→ ${m==="boot"?"Boot":"APP"}`,"ok"); return m; }
       catch(e){ await sleep(400); }
     }
     throw new Error("扫描超时：设备未重新广播");
+  },
+  /* 全自动闭环：复用/自动连接 -> 确保 boot -> 载入固件 -> 升级 -> 回读状态。
+     不弹 chooser（前提：本页已有一次授权或已连接）。 */
+  async autoClosure(opt={}){
+    const targetSel = opt.target || "M";
+    const url = opt.url || "./firmware/M_9501-000-02166_v1.hex";
+    const rounds = opt.rounds || 1;
+    const out = [];
+    window.ota.setTarget(targetSel);
+    for(let i=1;i<=rounds;i++){
+      const step = {round:i};
+      step.connect = await window.ota.scanAndConnect(opt.connectMs||30000);
+      if(step.connect==="app"){
+        log(`[auto ${i}] 在 APP，发送进 Boot 命令…`,"dim");
+        step.enterBoot = await enterBoot();
+        if(!step.enterBoot) throw new Error("自动进 Boot 失败");
+        setBadge("boot");
+      }
+      await window.ota.useUrl(url);
+      step.fw = {size: fw.length};
+      log(`[auto ${i}] 开始升级 ${url} (${fw.length} B)`,"st");
+      await startUpgrade();
+      const st = window.ota.status();
+      step.status = {pct:st.pct, pkts:st.pkts, timings:st.timings,
+                     ok: st.log.some(l=>l.includes("升级成功"))};
+      out.push(step);
+      if(!step.status.ok) throw new Error(`第 ${i} 轮未成功：${JSON.stringify(step.status)}`);
+    }
+    return out;
   },
   async reconnect(){
     try{ device?.gatt?.disconnect(); }catch(_){}
