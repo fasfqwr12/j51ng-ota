@@ -86,3 +86,5 @@
 | `05-host-diff-and-race.md` | 插件 vs 网页差异、SHA 竞态根因、`0x0202` 挂起修复 |
 | `06-protocol-frames.md` | BLE 帧 / UART 帧 / 状态码参考表 |
 | `07-verification-log.md` | 已跑过的实机记录与判定标准 |
+| `flow.html` | **竖向泳道流程图**（4 角色竖列、时间自上而下、3 个 tab、点击节点看说明；GB18030 双击即开） |
+| `flow.utf8.html` | 同上的 UTF-8+BOM 版，供 GitHub Pages 部署 |

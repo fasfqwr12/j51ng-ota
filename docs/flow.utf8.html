@@ -2,126 +2,197 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
-<title>J51NG OTA 竖向流程图</title>
+<title>J51NG OTA 流程图 · 竖向泳道</title>
 <style>
 *{box-sizing:border-box}
 body{margin:0;background:#f4f6f1;color:#20261f;font:14px/1.6 "Microsoft YaHei","Segoe UI",sans-serif}
-header{background:#26321f;color:#fff;padding:16px 24px}
+header{background:#26321f;color:#fff;padding:16px 24px;position:sticky;top:0;z-index:5}
 header h1{margin:0;font-size:18px}
 header p{margin:4px 0 0;color:#b8c9ae;font-size:12px}
-.tabs{display:flex;gap:8px;padding:12px 24px 0;flex-wrap:wrap}
+.tabs{display:flex;gap:8px;padding:12px 24px;flex-wrap:wrap;background:#f4f6f1}
 .tab{border:1px solid #cbd5c3;background:#fff;color:#5c6a56;padding:7px 16px;border-radius:18px;cursor:pointer;font-size:13px}
 .tab.on{background:#4b6b3c;border-color:#4b6b3c;color:#fff;font-weight:700}
-main{max-width:900px;margin:14px auto 40px;padding:0 18px}
-.step{display:grid;grid-template-columns:56px 1fr;gap:14px}
-.num{width:44px;height:44px;border-radius:50%;background:#4b6b3c;color:#fff;font-weight:800;
-     display:flex;align-items:center;justify-content:center;font-size:16px;position:relative;margin:0 auto}
-.num.risk{background:#c1440e}.num.ok{background:#2e7d4f}.num.info{background:#2f5d8a}
-.step:not(:last-child) .num:after{content:"";position:absolute;top:44px;left:21px;width:2px;height:30px;background:#c9d6bf}
-.card{background:#fff;border:1px solid #d5dfcd;border-left:4px solid #7d9a6c;border-radius:9px;
-      padding:10px 14px;margin-bottom:14px;cursor:pointer}
-.card.risk{border-left-color:#c1440e;background:#fff7f2}
-.card.ok{border-left-color:#2e7d4f;background:#f0f9f3}
-.card.phase{border-left-color:#2f5d8a;background:#eef4fa}
-.card h3{margin:0 0 3px;font-size:14px}
-.card .fr{font:11.5px Consolas,monospace;color:#2f5d8a}
-.card p{margin:5px 0 0;font-size:12.5px;color:#4e5a49}
-.phasebar{background:#2f5d8a;color:#fff;border-radius:7px;padding:8px 14px;margin:20px 0 12px;font-weight:700;font-size:13px}
-.phasebar.risk{background:#c1440e}
+.bar{padding:0 24px 12px;font-size:12px;color:#6b7a63;display:flex;gap:16px;flex-wrap:wrap}
+.lg{display:inline-flex;align-items:center;gap:6px}
+.dot{width:11px;height:11px;border-radius:3px;display:inline-block}
+.stage{background:#fff;border:1px solid #d5dfcd;border-radius:10px;margin:0 24px 30px;overflow:auto;box-shadow:0 1px 3px #0001}
+svg{display:block}
+.lanehdr{font-size:12.5px;font-weight:800;fill:#fff}
+.lanesub{font-size:10px;fill:#dfe9d6}
+.colbg{fill-opacity:.5}
+.vgrid{stroke:#e2e9dc;stroke-width:1}
+.axis{font-size:12px;font-weight:800;fill:#8a9a80;font-family:Consolas,monospace}
+.node{cursor:pointer}
+.node rect{stroke-width:1.7;rx:8}
+.node:hover rect{stroke-width:2.8}
+.node .t{font-size:11.5px;font-weight:700;fill:#1f2420}
+.node .f{font-size:9.5px;fill:#5b6a55;font-family:Consolas,monospace}
+.node .n{font-size:9px;fill:#8a9484}
+.edge{fill:none;stroke:#9aa89a;stroke-width:1.8;marker-end:url(#ar)}
+.edge.risk{stroke:#c1440e;stroke-width:2.2;stroke-dasharray:5 4;marker-end:url(#arr)}
+.phaseband{fill-opacity:.9}
+.phasetx{font-size:10.5px;font-weight:700;fill:#fff}
 #d{position:fixed;right:16px;bottom:16px;width:330px;background:#fff;border:1px solid #d5dfcd;
    border-left:4px solid #4b6b3c;border-radius:9px;padding:13px 15px;box-shadow:0 6px 22px #0002;display:none;z-index:9}
 #d h3{margin:0 0 5px;font-size:14px}#d p{margin:0;font-size:12.5px;color:#4a5546}
 #d .x{float:right;cursor:pointer;color:#96a292}
-code{background:#eef2ea;padding:1px 5px;border-radius:4px;font-size:12px}
-footer{text-align:center;color:#78836f;font-size:12px;padding:0 0 30px}
 </style>
 </head>
 <body>
-<header><h1>J51NG OTA · 竖向流程图（数字编号）</h1>
-<p>从上到下 = 时间顺序 · 每个阶段独占 CPU · 点击卡片看说明</p></header>
+<header><h1>J51NG OTA · 竖向泳道流程图</h1>
+<p>纵向 = 时间从上到下 · 横向 = 4 个角色泳道 · 箭头 = 控制流 · 点击节点看说明</p></header>
 <div class="tabs">
  <button class="tab on" data-v="M">① 主控 M 升级</button>
  <button class="tab" data-v="S">② 蓝牙板 S 自升级</button>
  <button class="tab" data-v="R">③ 参考设计对比</button>
 </div>
-<main id="root"></main>
+<div class="bar">
+ <span class="lg"><i class="dot" style="background:#fff;border:1.5px solid #8ea886"></i>普通步骤</span>
+ <span class="lg"><i class="dot" style="background:#eaf6ee;border:1.5px solid #2e7d4f"></i>成功判据</span>
+ <span class="lg"><i class="dot" style="background:#fff1e8;border:1.5px dashed #c1440e"></i>风险 / 独占阶段</span>
+ <span class="lg"><i class="dot" style="background:#9aa89a"></i>控制流</span>
+ <span class="lg"><i class="dot" style="background:#c1440e"></i>风险流</span>
+</div>
+<div class="stage" id="stage"></div>
 <div id="d"><span class="x" onclick="hide()">X</span><h3></h3><p></p></div>
-<footer>冻结基线 2026-11-11 · 协议不变，仅交互时序串行化</footer>
 <script>
-const V={};
-V.M=[
- {k:"phase",t:"阶段 0 · 连接与模式",f:"",d:"上位机连上 S 板（唯一 BLE 中心）。0x0101 有应答=已在 boot；无应答=在 APP，先发 53 A2 04 00 FF 01 F9 01 让其写 PENDING 并复位。"},
- {n:1,t:"0x0101 握手请求",f:"上位机 -> S板 · 16B 硬件码 J51VA-M",d:"S 板据硬件码判定目标为 M，回 0x0102 含 maxpkt=228、暂存区可用大小。"},
- {n:2,t:"0x0102 应答先发出",f:"S板 -> 上位机 · ble_flush_tx_ms(30)",d:"关键：先刷出去主机才不会握手超时。以前整片擦除压在应答前，导致 0x0101 偶发超时。"},
- {k:"phase risk",t:"阶段 A · 擦除暂存区（独占、原子）",f:"",d:"本次改动核心：擦除成为一个独立阶段，不再与收数据并行。"},
- {n:3,t:"分片擦除，每片喂一次 BLE",f:"for sector = 0x01030000 .. 0x01080000",d:"每片 4KB 共 80 片。循环里只做两件事：boot_flash_erase_range() + boot_ble_process()（只喂 BLE 回调保连接）。不取协议帧、不写 flash、不回 ACK、不推进状态机 —— CPU 不再又擦又传又写又回调。"},
- {n:4,t:"擦除完成，复位写游标",f:"[BL] erase done (atomic)",d:"boot_flash_set_write_address(0x01030000)。此时主机还在等流程，一个数据包都没发。"},
- {k:"phase",t:"阶段 B · 参数与数据（独占）",f:"",d:"擦除完全结束后才允许进入。"},
- {n:5,t:"0x0201 参数帧",f:"size(4)+sha256(32)+pkt(2) = 38B",d:"S 板记录 firmware_total_size 与 expected_sha256。0x0401 里再带的 SHA 会被忽略。"},
- {n:6,t:"0x0202 立即应答",f:"S板 -> 上位机 · status=0 + flush",d:"暂存区已擦净，无需挂起。上位机收到才开始发数据。"},
- {n:7,t:"0x0301 数据包 xN",f:"128B(插件) / 228B(网页)",d:"seq/total/len/data + CRC8，win=32。数据阶段独占：只收包、写暂存 flash、回 ACK，没有任何擦除，也没有 UART 动作。"},
- {n:8,t:"0x0302 批量 ACK",f:"S板 -> 上位机 · 每 8 包",d:"ACK 只在 flash 写入成功后发。全 ACK 现在真正等于全写对。"},
- {k:"phase",t:"阶段 C · 校验（独占）",f:"",d:""},
- {n:9,t:"实算暂存区 SHA256",f:"boot_flash_compute_sha256(base, written)",d:"先断言 written == firmware_total_size，再与 expected_sha256 比对。0x0401/0x0402 交换结果。"},
- {n:10,t:"0x0402 status=0",f:"S板 -> 上位机",d:"暂存区校验通过，进入 APPLYING。0x11=失败。"},
- {k:"phase info",t:"阶段 D · 转发给主控（独占）",f:"prestart 在这里",d:"以前 prestart 挂在 0x0202 之后、与 BLE 传数据并行（省时间但 CPU 同时干两类事）；现在移到 SHA 通过之后，完全串行。日志：[BL] main prestart AFTER SHA。"},
- {n:11,t:"prepare：让主控进 boot",f:"boot_main_upgrade_prepare()",d:"S 板通过 UART 发 0x1000 ENTER_BL，让主控复位进 boot、握手、擦除自己 APP 区。此时 BLE 数据已全收完，CPU 只干这一件事。"},
- {n:12,t:"0x1011 转发 x102",f:"S板 -> M · 每包 1024B",d:"从暂存区按 pkt_index*1024 顺序读出。主控用累计 written_offset 写 0x08002800，擦/写失败即回 0x23 不 ACK。"},
- {n:13,t:"0x1021 status=0",f:"M -> S · SHA 结果",d:"主控对 APP 区算 BL_SHA256_Compute，与 0x1002 期望值比对。0x00 才是真通过。"},
- {n:14,t:"0xFF00 完成指令",f:"S板 -> M",d:"主控更新 boot_data 并跳新 APP。"},
- {k:"phase ok",t:"阶段 E · 收尾",f:"",d:""},
- {n:15,t:"0x0502=0x00",f:"S板 -> 上位机",d:"apply 成功应答，语义是应用结果，不是收到。"},
- {n:16,t:"主控跳新 APP；S 板留在 boot",f:"不复位 / 不断链",d:"只有 dispatch_target==SUB 才复位。给主控升级时副板固件没变，原地待命继续广播。"}
+/* l = 泳道列(0..3), c = 时间行(0..N) —— 竖向：y 由 c 定, x 由 l 定 */
+const LANES=[
+ {n:"上位机",s:"PC / 浏览器",c:"#eef3e8"},
+ {n:"S 蓝牙板",s:"N32WB031 暂存/中转",c:"#e8f0f7"},
+ {n:"S－M UART",s:"0x10xx 共用线",c:"#f7f1e6"},
+ {n:"M 主控",s:"GD32F303CB",c:"#f3eaf3"}
 ];
-V.S=[
- {k:"phase",t:"阶段 0 · 连接与模式",f:"",d:"0x0101 有应答=boot；无应答=APP，发进 Boot 命令复位。"},
- {n:1,t:"0x0101 / 0x0102",f:"硬件码 J51VA-S",d:"同 M 路径。"},
- {k:"phase risk",t:"阶段 A · 擦除暂存区（独占、原子）",f:"",d:"与 M 完全相同：0x0102 先发，然后分片擦 + 喂 BLE，擦完才允许后续。"},
- {n:2,t:"分片擦除完成",f:"[BL] erase done (atomic)",d:"不取帧、不写、不回 ACK。"},
- {k:"phase",t:"阶段 B · 数据（独占）",f:"",d:""},
- {n:3,t:"0x0201 -> 0x0202 -> 0x0301 xN -> 0x0302",f:"",d:"擦净后立刻应答；数据阶段只写暂存区，无其他动作。"},
- {k:"phase",t:"阶段 C · 校验",f:"",d:""},
- {n:4,t:"0x0401 -> 0x0402 status=0",f:"",d:"长度断言 + 暂存区 SHA 比对。"},
- {k:"phase info",t:"阶段 D · 搬运（独占）",f:"",d:"目标 S 不需要 UART 转发，改为把自己暂存区搬到 APP 区。"},
- {n:5,t:"切片 ERASE",f:"[SUB] erase",d:"擦 S APP 区 0x01010000 起，每拍一扇区。"},
- {n:6,t:"切片 COPY",f:"[SUB] copy",d:"暂存区 -> APP 区，每拍 1KB。"},
- {n:7,t:"切片 VERIFY",f:"[SUB] verify",d:"逐段 memcmp 源区 vs APP 区。"},
- {n:8,t:"完整性标记",f:"boot_app_integrity_mark",d:"写 magic 0x41505031。"},
- {k:"phase ok",t:"阶段 E · 复位",f:"",d:""},
- {n:9,t:"0x0502=0x00",f:"",d:"APPLYING 期间不消费 BLE 帧，上位机需重发 0x0501。"},
- {n:10,t:"清标志 + 复位进新 APP",f:"ns_ble_adv_stop / rwip_reset / NVIC_SystemReset",d:"S 板自己复位断开，上位机重连探到 APP 模式 = 成功。"}
+const M=[
+ {c:0,l:0,t:"选 M 镜像",f:".hex / .bin",d:"算 SHA256 与长度；HEX 按基址 0x08002800 展开。"},
+ {c:1,l:0,t:"连接 / 探模式",f:"0x0101 -> 0x0102",d:"有应答=boot；无应答=APP，发 53 A2 04 00 FF 01 F9 01 让其写 PENDING 并复位。"},
+ {c:2,l:1,t:"握手应答",f:"0x0102 maxpkt=228",d:"先 flush 再擦除，主机不会握手超时。"},
+ {c:3,l:1,t:"阶段 A：原子擦除",f:"每片 4KB + 喂 BLE",d:"独占阶段：只擦一个扇区 + boot_ble_process()。不取帧、不写 flash、不回 ACK、不推进状态机。共 80 片，擦完才允许后续。",k:"risk"},
+ {c:4,l:0,t:"参数帧",f:"0x0201 · 38 B",d:"size(4)+sha256(32)+pkt(2)。S 板存 expected_sha256。"},
+ {c:5,l:1,t:"参数应答",f:"0x0202 status=0",d:"暂存区已擦净，立即放行。上位机收到才开始发数据。"},
+ {c:6,l:0,t:"发数据包",f:"0x0301 x N",d:"128B(插件) / 228B(网页)，win=32。数据阶段独占，无任何擦除。"},
+ {c:7,l:1,t:"写暂存 + ACK",f:"0x0302 批量",d:"ACK 只在 flash 写入成功后发。全 ACK 现在真正等于全写对。"},
+ {c:8,l:1,t:"实算暂存 SHA",f:"compute_sha256",d:"先断言 written == firmware_total_size，再比摘要。",k:"ok"},
+ {c:9,l:0,t:"SHA 请求",f:"0x0401",d:"payload 带 SHA，设备忽略，用 0x0201 的值。"},
+ {c:10,l:1,t:"SHA 应答",f:"0x0402 status=0",d:"0x00=通过；0x11=暂存区内容不对。",k:"ok"},
+ {c:11,l:1,t:"prestart 让主控复位",f:"main prestart AFTER SHA",d:"原在 0x0202 后与 BLE 并行；现移到 SHA 通过后串行。日志保留，可确认动作发生。",k:"info"},
+ {c:12,l:2,t:"让主控进 boot",f:"0x1000 / 0x1001 / 0x1002",d:"ENTER_BL -> announce ready=1 -> 交 version+SHA。共用 UART，PC 的 CH340 必须拔。"},
+ {c:13,l:3,t:"写主控 APP 区",f:"0x1011 x 102",d:"从暂存区按 pkt_index*1024 读。主控累计 written_offset 写 0x08002800，擦写失败即回 0x23 不 ACK。"},
+ {c:14,l:3,t:"主控回报",f:"0x1012 / 0x1021",d:"0x1021 status=0 才是主控 APP 区 SHA 通过。",k:"ok"},
+ {c:15,l:2,t:"完成指令",f:"0xFF00",d:"主控更新 boot_data 并跳新 APP。"},
+ {c:16,l:1,t:"完成应答",f:"0x0502 = 0x00",d:"apply 结果，不是「收到」。",k:"ok"},
+ {c:17,l:3,t:"主控跳新 APP",f:"jump_to_application",d:"校验 SP/PC 后跳转。",k:"ok"},
+ {c:18,l:1,t:"S 板留在 boot",f:"不复位 / 不断链",d:"只有 dispatch_target==SUB 才复位。给主控升级时副板固件没变，继续广播。",k:"ok"}
 ];
-V.R=[
- {k:"phase",t:"W515 IAP 参考（你原来的设计）",f:"bootloader.c · 命令 0x01~0x09",d:"状态机 IDLE -> ERASING -> PROGRAMMING -> VERIFYING -> SUCCESS。"},
- {n:1,t:"CMD_ERASE_FLASH (0x04)",f:"flash_erase_pages(addr,size) -> ACK",d:"整段擦完才应答。擦除期间主机在等 ACK，一个数据包都不发。"},
- {n:2,t:"CMD_WRITE_DATA (0x05) xN",f:"每包自带 32 位地址",d:"写成功才 ACK。期间没有任何擦除动作。"},
- {n:3,t:"CMD_VERIFY_DATA (0x06)",f:"addr + size + CRC32",d:"单独一步算 CRC 与主机给的比，范围显式。"},
- {n:4,t:"CMD_RESET_DEVICE (0x07)",f:"",d:"跳新 APP。"},
- {k:"phase ok",t:"我们借鉴了什么、没改什么",f:"",d:""},
- {n:5,t:"借鉴：交互方式",f:"",d:"擦是独立原子阶段、写是独立阶段、校验是独立阶段。阶段之间不并行，CPU 一次只干一类事。"},
- {n:6,t:"借鉴：擦完才应答",f:"",d:"0x0102 先发 -> 原子擦除 -> 0x0202 才放行。不再边擦边收。"},
- {n:7,t:"没改：协议帧",f:"",d:"EB90 帧、CRC8、0x0101~0x0502、SHA256、16B 硬件码、1024B UART 分包，全部保持。"},
- {n:8,t:"没改：我们的优势",f:"",d:"参数帧一次给 size+sha+pkt（比参考独立擦除帧更紧凑）；暂存区让 M/S 共用一套收包逻辑。"},
- {n:9,t:"prestart 位置的记录",f:"[BL] main prestart AFTER SHA",d:"原代码在 0x0202 之后立刻 prepare 让主控进 boot，与 BLE 传数据并行（省时间但 CPU 同时干两类事）。现在移到 SHA 通过之后串行化；日志保留，可确认动作确实发生。"}
+const S=[
+ {c:0,l:0,t:"选 S 镜像",f:".hex / .bin",d:"基址 0x01010000。"},
+ {c:1,l:0,t:"连接 / 进 boot",f:"53 A2 .. F9 01",d:"APP 写 PENDING + 复位。"},
+ {c:2,l:1,t:"握手",f:"0x0102 maxpkt",d:"先 flush。"},
+ {c:3,l:1,t:"阶段 A：原子擦除",f:"每片 4KB + 喂 BLE",d:"独占阶段，与 M 路径完全相同。",k:"risk"},
+ {c:4,l:0,t:"参数帧",f:"0x0201 · 38 B",d:"size + sha256 + pkt。"},
+ {c:5,l:1,t:"参数应答",f:"0x0202 status=0",d:"擦净后立刻放行。"},
+ {c:6,l:0,t:"发数据包",f:"0x0301 x N",d:"写暂存区 0x01030000，阶段独占。"},
+ {c:7,l:1,t:"写暂存 + ACK",f:"0x0302 批量",d:"只在写成功后 ACK。"},
+ {c:8,l:1,t:"实算 SHA",f:"0x0401 -> 0x0402",d:"长度断言 + 摘要比对。",k:"ok"},
+ {c:9,l:1,t:"切片 ERASE",f:"[SUB] erase",d:"擦 S APP 区，每拍一扇区。"},
+ {c:10,l:1,t:"切片 COPY",f:"[SUB] copy",d:"暂存区 -> APP 区，每拍 1KB。"},
+ {c:11,l:1,t:"切片 VERIFY",f:"[SUB] verify",d:"逐段 memcmp 源区 vs APP 区。",k:"ok"},
+ {c:12,l:1,t:"完整性标记",f:"integrity_mark",d:"写 magic 0x41505031。",k:"ok"},
+ {c:13,l:1,t:"完成应答",f:"0x0502 = 0x00",d:"APPLYING 不消费帧，需重发 0x0501。",k:"ok"},
+ {c:14,l:1,t:"清标志 + 复位",f:"adv_stop / rwip_reset",d:"NVIC 复位不动射频核，必须先 rwip_reset。"},
+ {c:15,l:1,t:"新 APP 广播",f:"AIMTECH VHR",d:"S 板断开，上位机重连探到 APP = 成功。",k:"ok"}
 ];
+const R=[
+ {c:0,l:0,t:"CMD_ERASE_FLASH",f:"0x04 擦整段",d:"擦完才 ACK。擦除期间主机一个数据包都不发。"},
+ {c:1,l:1,t:"flash_erase_pages",f:"addr + size",d:"整段擦除，独立阶段。"},
+ {c:2,l:0,t:"CMD_WRITE_DATA x N",f:"0x05 每包带地址",d:"写成功才 ACK。期间没有任何擦除动作。"},
+ {c:3,l:1,t:"flash_write_data",f:"addr(4) + data",d:"每包显式 32 位地址，不靠 seq 推算。"},
+ {c:4,l:0,t:"CMD_VERIFY_DATA",f:"0x06 addr+size+CRC32",d:"单独一步算 CRC 与主机给的比，范围显式。",k:"ok"},
+ {c:5,l:1,t:"flash_calc_verify_crc",f:"",d:"CRC 相等才 SUCCESS。",k:"ok"},
+ {c:6,l:0,t:"CMD_RESET_DEVICE",f:"0x07",d:"跳新 APP。"},
+ {c:7,l:1,t:"借鉴：交互方式",f:"",d:"擦 / 写 / 校验 三个独立阶段，阶段间不并行。",k:"info"},
+ {c:8,l:1,t:"借鉴：擦完才应答",f:"",d:"0x0102 先发 -> 原子擦除 -> 0x0202 放行。",k:"info"},
+ {c:9,l:1,t:"没改：协议帧",f:"",d:"EB90 / CRC8 / 0x0101~0x0502 / SHA256 / 1024B UART 分包 全部保持。",k:"ok"},
+ {c:10,l:1,t:"prestart 位置记录",f:"main prestart AFTER SHA",d:"原并行省时间、现串行不挤 CPU；日志保留。",k:"info"}
+];
+const PHASES={
+ M:[{a:0,b:2,t:"阶段 0 连接"},{a:3,b:3,t:"阶段 A 原子擦除",r:1},{a:4,b:8,t:"阶段 B 数据(独占)"},
+    {a:9,b:10,t:"阶段 C 校验"},{a:11,b:15,t:"阶段 D 转发(独占)"},{a:16,b:18,t:"阶段 E 收尾",g:1}],
+ S:[{a:0,b:2,t:"阶段 0 连接"},{a:3,b:3,t:"阶段 A 原子擦除",r:1},{a:4,b:8,t:"阶段 B 数据/校验"},
+    {a:9,b:13,t:"阶段 D 切片搬运"},{a:14,b:15,t:"阶段 E 复位",g:1}],
+ R:[{a:0,b:3,t:"擦 / 写 独立"},{a:4,b:6,t:"校验 / 复位"},{a:7,b:10,t:"借鉴与保留",g:1}]
+};
+const W=176,H=54,COL=196,X0=76,Y0=58,ROW=76;
 function esc(s){return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;")}
-function show(x){const d=document.getElementById("d");d.querySelector("h3").textContent=x.t||x.k;d.querySelector("p").textContent=x.d||"";d.style.display="block"}
-function hide(){document.getElementById("d").style.display="none"}
 function render(v){
- let h="";
- for(const x of V[v]){
-  if(x.k){h+=`<div class="phasebar ${x.k.includes("risk")?"risk":""}">${esc(x.t)}</div>`;
-          h+=`<div class="card phase" onclick="show(V['${v}'].find(a=>a.t===this.querySelector('h3').textContent))"><h3>${esc(x.t)}</h3><div class="fr">${esc(x.f)}</div><p>${esc(x.d)}</p></div>`;continue}
-  const cls=x.k||"";
-  h+=`<div class="step"><div class="num ${cls}">${String(x.n).padStart(2,"0")}</div>`+
-     `<div class="card ${cls}" onclick="show(V['${v}'].find(a=>a.t===this.querySelector('h3').textContent))">`+
-     `<h3>${esc(x.t)}</h3><div class="fr">${esc(x.f)}</div><p>${esc(x.d)}</p></div></div>`;
+ const nodes={M,S,R}[v], ph=PHASES[v];
+ const rows=Math.max(...nodes.map(n=>n.c))+1;
+ const w=X0+LANES.length*COL+20, h=Y0+rows*ROW+24;
+ let s=`<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" xmlns="http://www.w3.org/2000/svg">
+ <defs>
+  <marker id="ar" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0,0 L0,6 L8,3 z" fill="#9aa89a"/></marker>
+  <marker id="arr" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0,0 L0,6 L8,3 z" fill="#c1440e"/></marker>
+ </defs>`;
+ // 泳道列背景 + 列头
+ LANES.forEach((ln,i)=>{
+  const x=X0+i*COL;
+  s+=`<rect class="colbg" x="${x}" y="0" width="${COL}" height="${h}" fill="${ln.c}"/>`;
+  s+=`<line class="vgrid" x1="${x}" y1="0" x2="${x}" y2="${h}"/>`;
+  s+=`<rect x="${x+4}" y="8" width="${COL-8}" height="40" rx="6" fill="#3b5230"/>`;
+  s+=`<text class="lanehdr" x="${x+12}" y="25">${esc(ln.n)}</text>`;
+  s+=`<text class="lanesub" x="${x+12}" y="40">${esc(ln.s)}</text>`;
+ });
+ s+=`<line class="vgrid" x1="${X0+LANES.length*COL}" y1="0" x2="${X0+LANES.length*COL}" y2="${h}"/>`;
+ // 阶段色带（左侧时间轴）
+ ph.forEach(p=>{
+  const y1=Y0+p.a*ROW-10, y2=Y0+p.b*ROW+H+8;
+  const col=p.r?"#c1440e":(p.g?"#2e7d4f":"#2f5d8a");
+  s+=`<rect class="phaseband" x="4" y="${y1}" width="64" height="${y2-y1}" rx="5" fill="${col}"/>`;
+  const mid=(y1+y2)/2;
+  p.t.split(" ").forEach((seg,k)=>{
+   s+=`<text class="phasetx" x="36" y="${mid-6+k*13}" text-anchor="middle">${esc(seg)}</text>`;
+  });
+ });
+ // 行号
+ nodes.forEach((n,i)=>{
+  const y=Y0+n.c*ROW+H/2;
+  s+=`<text class="axis" x="68" y="${y+4}" text-anchor="end">${String(i+1).padStart(2,"0")}</text>`;
+ });
+ // 连线（从上一个节点底部 -> 本节点顶部，竖向折线）
+ for(let i=1;i<nodes.length;i++){
+  const a=nodes[i-1],b=nodes[i];
+  const ax=X0+a.l*COL+COL/2, ay=Y0+a.c*ROW+H;
+  const bx=X0+b.l*COL+COL/2, by=Y0+b.c*ROW;
+  const my=(ay+by)/2;
+  const risk=(a.k==="risk"||b.k==="risk")?"risk":"";
+  s+=`<path class="edge ${risk}" d="M${ax},${ay} V${my} H${bx} V${by}"/>`;
  }
- document.getElementById("root").innerHTML=`<div class="view on">${h}</div>`;
+ // 节点
+ nodes.forEach((n,i)=>{
+  const x=X0+n.l*COL+10, y=Y0+n.c*ROW;
+  const fill=n.k==="risk"?"#fff1e8":(n.k==="ok"?"#eaf6ee":(n.k==="info"?"#eaf2fa":"#fff"));
+  const st=n.k==="risk"?"#c1440e":(n.k==="ok"?"#2e7d4f":(n.k==="info"?"#2f5d8a":"#8ea886"));
+  const dash=n.k==="risk"?'stroke-dasharray="4 3"':'';
+  s+=`<g class="node" data-i="${i}" transform="translate(${x},${y})">
+   <rect width="${W}" height="${H}" fill="${fill}" stroke="${st}" ${dash}/>
+   <text class="n" x="8" y="14">${String(i+1).padStart(2,"0")}</text>
+   <text class="t" x="8" y="30">${esc(n.t)}</text>
+   <text class="f" x="8" y="45">${esc(n.f)}</text>
+  </g>`;
+ });
+ s+=`</svg>`;
+ document.getElementById("stage").innerHTML=s;
+ document.querySelectorAll(".node").forEach(g=>g.onclick=()=>{
+  const n=nodes[+g.dataset.i], d=document.getElementById("d");
+  d.querySelector("h3").textContent=n.t;d.querySelector("p").textContent=n.d||"";
+  d.style.borderLeftColor=(n.k==="risk"?"#c1440e":(n.k==="ok"?"#2e7d4f":"#4b6b3c"));
+  d.style.display="block";
+ });
 }
+function hide(){document.getElementById("d").style.display="none"}
 document.querySelectorAll(".tab").forEach(b=>b.onclick=()=>{
  document.querySelectorAll(".tab").forEach(x=>x.classList.remove("on"));b.classList.add("on");
- hide();render(b.dataset.v);window.scrollTo(0,0);
+ hide();render(b.dataset.v);document.getElementById("stage").scrollTop=0;
 });
 render("M");
 </script>
