@@ -128,6 +128,7 @@ function gatt(timeoutMs){
           i+=7+len; continue;
         }
       }
+      appendDevLog(a[i]);
       i++;
     }
   });
@@ -146,6 +147,20 @@ function onDisconnect(){
 const FRAME_NAME = {0x0000:"BEACON",0x0101:"HS请求",0x0102:"HS应答",0x0201:"参数请求",0x0202:"参数应答",
   0x0301:"数据",0x0302:"ACK",0x0303:"NACK",0x0401:"SHA请求",0x0402:"SHA应答",
   0x0501:"完成请求",0x0502:"完成应答",0x0601:"发主控EnterBL",0x0602:"发主控Raw",0x0603:"主控命令应答"};
+/* ---- 蓝板 bootloader 日志：printf 走 BLE NTF，非 EB90 字节就是日志文本 ---- */
+let __devLog = "";
+function appendDevLog(c){
+  if(c===0x0A){ flushDevLog(); return; }
+  if(c===0x0D){ return; }
+  if((c>=0x20 && c<0x7F) || c>=0x80){ __devLog += String.fromCharCode(c); }
+  if(__devLog.length>=200){ flushDevLog(); }
+}
+function flushDevLog(){
+  const t = __devLog.trim();
+  __devLog = "";
+  if(t) log("[设备] " + t, "dim");
+}
+
 function hex2(p, n){ return [...p.slice(0, n)].map(b=>b.toString(16).padStart(2,'0').toUpperCase()).join(' '); }
 function logTx(type, payload){ log(`    → ${FRAME_NAME[type]||("0x"+type.toString(16))} len=${payload.length}`,"dim"); }
 function logRx(type, payload){
@@ -696,6 +711,40 @@ window.ota = {
     return true;
   },
   setTarget(t){ const b=[...$("seg").children].find(x=>x.dataset.t===t); if(b) b.click(); return t; },
+  /* 手动让蓝牙板给主控发 Enter-BL（0x0601），用来单独验证 S→M 链路 */
+  async mainEnterBL(){
+    await send(0x0601, new Uint8Array(0));
+    log("已发送：让蓝牙板给主控发 Enter-BL","st");
+  },
+  /* 原样透传一段字节给主控（0x0602） */
+  async mainRaw(bytes){
+    await send(0x0602, new Uint8Array(bytes));
+    log("已发送：主控原始字节 "+bytes.map(b=>b.toString(16).padStart(2,'0')).join(' '),"st");
+  },
+
+  /* 读蓝牙板串口收到了什么（0x0604 / 0x0605）——S→M 链路的一把尺子 */
+  async mainDump(ms=1500){
+    frames.length=0;
+    await send(0x0604, new Uint8Array(0));
+    const p=await waitFrame(0x0605, ms);
+    if(!p){ log("主控串口：超时，蓝牙板没回（S 板可能不在 boot 或没烧新固件）","err"); return null; }
+    const n=((p[0]<<8)|p[1])>>>0;
+    const data=p.slice(2,2+n);
+    if(!n){ log("主控串口：缓冲区为空 —— 蓝牙板没收到主控任何字节","err"); return []; }
+    log(`主控串口收到 ${n} 字节：`+[...data].map(b=>b.toString(16).padStart(2,"0")).join(" "),"ok");
+    return [...data];
+  },
+  /* 连续取样：看主控 50ms 一次的 0x1001 广播能不能稳定收到 */
+  async mainDumpLoop(times=6, gapMs=300){
+    const out=[];
+    for(let i=0;i<times;i++){
+      try{ out.push(await this.mainDump(900)); }catch(e){ out.push(null); }
+      await sleep(gapMs);
+    }
+    const hit=out.filter(x=>x&&x.length>0).length;
+    log(`取样 ${times} 次，收到 ${hit} 次 —— ${hit>=times-1?"S→M 链路正常":(hit===0?"S→M 完全不通":"S→M 不稳定")}`, hit>=times-1?"ok":"err");
+    return out;
+  },
   async scanAndConnect(maxMs=30000){
     const t0=performance.now(); let n=0;
     while(performance.now()-t0<maxMs){
