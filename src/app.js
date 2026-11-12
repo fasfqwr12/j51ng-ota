@@ -355,6 +355,87 @@ function parseHex(txt){
 async function sha256(u8){
   return new Uint8Array(await crypto.subtle.digest("SHA-256", u8));
 }
+
+/* ---------------- J5AA 镜像头（单一事实源，只读不算） ----------------
+ * 规范: 01_docs/IMAGE_HEADER_SPEC → 48B @ image+0x200, 小端
+ * 0x00 magic "J5AA"  0x04 header_ver  0x06 image_type(0=APP 1=BOOT)
+ * 0x07 target(0=W515 1=N32)  0x08 fw_version  0x0A hw_version
+ * 0x0C payload_size  0x10 payload_crc32  0x14 payload_base
+ * 0x18 flags  0x1C min_boot_ver  0x1E reserved  0x20 model[12]  0x2C header_crc32
+ */
+const J5AA_OFF = 0x200, J5AA_SIZE = 48, J5AA_MAGIC = 0x4141354A;
+
+let __crcTab = null;
+function crc32(u8){
+  if(!__crcTab){
+    __crcTab = new Uint32Array(256);
+    for(let n=0;n<256;n++){
+      let c=n;
+      for(let k=0;k<8;k++) c = (c&1) ? (0xEDB88320 ^ (c>>>1)) : (c>>>1);
+      __crcTab[n]=c>>>0;
+    }
+  }
+  let crc = 0xFFFFFFFF;
+  for(let i=0;i<u8.length;i++) crc = __crcTab[(crc ^ u8[i]) & 0xFF] ^ (crc >>> 8);
+  return (crc ^ 0xFFFFFFFF) >>> 0;
+}
+
+function parseJ5AA(fw){
+  if(!fw || fw.length < J5AA_OFF + J5AA_SIZE) return null;
+  const dv = new DataView(fw.buffer, fw.byteOffset, fw.byteLength);
+  const magic = dv.getUint32(J5AA_OFF, true);
+  if(magic !== J5AA_MAGIC) return null;
+  const hdr = fw.subarray(J5AA_OFF, J5AA_OFF + 0x2C);
+  const hcrcStored = dv.getUint32(J5AA_OFF + 0x2C, true);
+  const hcrcCalc   = crc32(hdr);
+  const model = [];
+  for(let i=0;i<12;i++){
+    const b = fw[J5AA_OFF + 0x20 + i];
+    if(!b) break;
+    model.push(String.fromCharCode(b));
+  }
+  const fwv = dv.getUint16(J5AA_OFF + 0x08, true);
+  return {
+    headerVer : dv.getUint16(J5AA_OFF + 0x04, true),
+    imageType : fw[J5AA_OFF + 0x06],
+    target    : fw[J5AA_OFF + 0x07],
+    fwVersion : fwv,
+    verText   : ((fwv>>8)&0xFF) + "." + (fwv&0xFF),
+    hwVersion : dv.getUint16(J5AA_OFF + 0x0A, true),
+    size      : dv.getUint32(J5AA_OFF + 0x0C, true),
+    payloadCrc: dv.getUint32(J5AA_OFF + 0x10, true),
+    base      : dv.getUint32(J5AA_OFF + 0x14, true),
+    model     : model.join(""),
+    hcrcStored, hcrcCalc,
+    hcrcOk    : hcrcStored === hcrcCalc
+  };
+}
+
+/* 把 J5AA 头显示到界面 + 打印日志 */
+function showJ5AA(meta, fwLen){
+  const el = $("kMeta");
+  if(!meta){
+    if(el) el.textContent = "—（无 J5AA 头，旧格式镜像）";
+    return;
+  }
+  const kind = meta.imageType === 0 ? "APP" : "BOOT";
+  const chip = meta.target === 1 ? "N32" : "W515";
+  const txt = `${kind} · ${chip} · v${meta.verText} · ${meta.model || "?"}`
+            + ` · size ${meta.size} · crc ${meta.payloadCrc.toString(16).padStart(8,"0").toUpperCase()}`
+            + (meta.hcrcOk ? "" : " · ⚠头CRC坏");
+  if(el) el.textContent = txt;
+  log(`J5AA 头: ${kind} target=${chip} fw=v${meta.verText} hw=0x${meta.hwVersion.toString(16)}`
+     + ` base=0x${meta.base.toString(16).padStart(8,"0")} size=${meta.size}`
+     + ` payload_crc=0x${meta.payloadCrc.toString(16).padStart(8,"0").toUpperCase()}`
+     + ` model="${meta.model}"`, meta.hcrcOk ? "dim" : "err");
+  if(!meta.hcrcOk){
+    log(`⚠ header_crc32 校验失败: 存 0x${meta.hcrcStored.toString(16)} / 算 0x${meta.hcrcCalc.toString(16)}`,"err");
+  }
+  if(meta.size !== fwLen){
+    log(`⚠ 头里 payload_size=${meta.size} 与实际文件 ${fwLen} B 不一致`,"err");
+  }
+}
+
 async function loadFile(f){
   try{
     $("kFile").textContent=f.name;
@@ -366,6 +447,9 @@ async function loadFile(f){
     const sha=await sha256(fw);
     $("kSize").textContent=fw.length.toLocaleString()+" B";
     $("kSha").textContent=[...sha].map(b=>b.toString(16).padStart(2,"0")).join("");
+    const j5=parseJ5AA(fw);
+    window.__j5aa=j5;                 /* 供升级流程比对版本 */
+    showJ5AA(j5, fw.length);
     $("tailFw").textContent=f.name;
     $("drop").classList.add("has");
     $("drop").innerHTML=`<div class="t">${f.name}</div><div class="h">${fw.length.toLocaleString()} B · 点击可更换</div>`;
@@ -453,18 +537,38 @@ async function probeModeOnly(timeout=2000){
   return r ? "boot" : "app";
 }
 /* 设备复位后自动重连：每 1.2 s 试一次，直到回来或超时 */
-async function waitReconnect(maxMs=30000){
-  const t0=performance.now(); let n=0;
+async function waitReconnect(maxMs=30000, waitDiscMs=12000){
+  const t0=performance.now();
+
+  /* ★ 阶段1：先等"真实断链"。
+   * apply 期间设备仍在 Boot 里搬运/校验，握手照常应答；
+   * 若此时重连会立刻判成"仍在 Boot"→ 误报升级失败（15:51 那次就是）。
+   * 必须以 gattserverdisconnected 事件作为"复位开始"的信号。 */
+  if(device && device.gatt && device.gatt.connected){
+    const why = await waitGattDisconnect(waitDiscMs);
+    if(why === "event") log("    已检测到断链事件，设备开始复位","dim");
+    else                log(`    ${Math.round(waitDiscMs/1000)} s 内未见断链事件，继续尝试重连`,"dim");
+  }
+
+  /* ★ 阶段2：重连 + 稳定性确认。
+   * 只连上不算数：必须连续两次(间隔 800ms)给出同样的模式，
+   * 避免把复位瞬间的"握手无应答"误判成 APP。 */
+  let n=0;
   while(performance.now()-t0<maxMs){
     n++;
     try{
-      // 只连不踢：反复 disconnect 会让 Chrome 的连接状态机卡死
-      const __t=performance.now();
       await gatt(1500);
-      const m = await probeModeOnly(900);
-      log(`    重连成功（第 ${n} 次尝试，${((performance.now()-t0)/1000).toFixed(1)} s）`,"ok");
-      setBadge(m);
-      return m;
+      const m1 = await probeModeOnly(900);
+      await sleep(800);
+      const m2 = await probeModeOnly(900);
+      const secs=((performance.now()-t0)/1000).toFixed(1);
+      if(m1===m2){
+        log(`    重连成功（第 ${n} 次，${secs} s）· 连续两次判定 ${m1==="app"?"APP":"Boot"}`,"ok");
+        setBadge(m1);
+        return m1;
+      }
+      log(`    第 ${n} 次判定不一致(${m1}/${m2})，设备仍在切换，再等…`,"dim");
+      await sleep(600);
     }catch(e){
       if(n%5===0) log(`    等待设备重启…（${Math.round((performance.now()-t0)/1000)} s）`,"dim");
       await sleep(800);
@@ -662,10 +766,18 @@ async function startUpgrade(){
       chip("升级成功","on");
       stage("升级成功");
     }else if(mode==="boot"){
-      log("[7] ❌ 升级未完成：设备重启后仍停在 Boot（镜像未跳转）","err");
+      log("[7] ❌ 升级未完成：设备复位后仍停在 Boot（镜像未跳转）","err");
+      log("    可能原因：APP 头校验失败 / 搬运后完整性记录不匹配 / 镜像不完整","dim");
       chip("需重试",""); stage("需重试");
     }else{
       throw new Error("已派发但设备 30 s 内未回来，请断电重启确认");
+    }
+    /* 版本确认：设备目前没有"回报 APP 镜像头"的命令，
+     * 只能确认它回到了 APP 并能应答。此处如实标注，不假装校验过。 */
+    if(mode==="app" && window.__j5aa){
+      log(`    已下发 v${window.__j5aa.verText} · ${window.__j5aa.size} B`
+        + ` · crc ${window.__j5aa.payloadCrc.toString(16).toUpperCase()}`
+        + `（版本回读待设备支持）`,"dim");
     }
     const __tot=((performance.now()-t0)/1000).toFixed(1);
     $("tAll").textContent=__tot+" s";
