@@ -53,6 +53,29 @@ def set_stage(s, ok=None):
 
 # ---------------- 闭环步骤 ----------------
 
+def wait_advertising(max_s=25):
+    """每秒扫 1 s，直到看到 AIMTECH 广播或超时。"""
+    import asyncio
+    from bleak import BleakScanner
+
+    async def go():
+        for i in range(1, max_s + 1):
+            await asyncio.sleep(1.0)
+            try:
+                devs = await BleakScanner.discover(timeout=1.0, return_adv=True)
+                hit = [a for a, (d, adv) in devs.items()
+                       if (d.name or adv.local_name or "").upper().startswith("AIMTECH")]
+                if hit:
+                    log(f"[1/4] 第 {i} s 看到广播（{hit[0]}）")
+                    return True
+                if i % 5 == 0:
+                    log(f"[1/4] 第 {i} s 未见广播，继续等…")
+            except Exception:
+                pass
+        log("[1/4] 25 s 内没等到广播，仍尝试继续", "err")
+        return False
+    return asyncio.run(go())
+
 def step_enter_boot():
     """发 53 A2 0xFF 让 APP 进 Boot。不等 ACK（实测被 0x06 周期帧挡住），
     发完就关连接，由后面的扫描确认设备是否已进入 Boot。"""
@@ -142,8 +165,8 @@ def job(target, fw):
         set_stage("进 Boot")
         if not step_enter_boot():
             log("[1/4] 进 Boot 失败，终止", "err"); set_stage("失败:进Boot", False); return
-        log("[1/4] 已请求进 Boot，等 9 s 让设备复位并广播…")
-        time.sleep(9)
+        log("[1/4] 已请求进 Boot，等设备复位并重新广播…")
+        wait_advertising(25)
 
         set_stage("OTA")
         ok = step_ota(target, fw)
