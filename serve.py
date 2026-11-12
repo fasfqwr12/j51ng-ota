@@ -101,31 +101,38 @@ def step_ota(target, fw):
     log(f"[2/4] ota_ble_s.py 退出码 {p.returncode}")
     return p.returncode == 0
 
-def step_verify():
-    """等复位后，用 SWD 读 pc + TRACE，判定最终落在 boot 还是 app"""
-    time.sleep(20)
+def step_verify(max_s=120):
+    """复位后轮询 SWD，直到 pc 落在 APP 或超时。返回 (zone, pc, 第几秒)"""
     def pycmd(*args):
         r = subprocess.run([sys.executable, "-m", "pyocd", "commander",
                             "-t", "n32wb031", "--pack", PACK, "-O", "connect_mode=attach",
                             *args, "-c", "go", "-c", "exit"],
                            capture_output=True)
         return (r.stdout + r.stderr).decode("utf-8", errors="replace")
-    out = pycmd("-c", "halt", "-c", "reg pc",
-                "-c", "read32 0x2000BD04", "-c", "read32 0x2000BD1C",
-                "-c", "read32 0x2000BC00")
-    pc = None
-    for line in out.splitlines():
-        if line.startswith("pc ="):
-            pc = int(line.split("=")[1].strip(), 16)
-        for key in ("2000bd04:", "2000bd1c:", "2000bc00:"):
-            if line.startswith(key):
-                log(f"[3/4] {key[:-1]} = {line.split(':')[1].strip()}")
-    if pc is None:
-        log("[3/4] SWD 读取失败：\n" + out[-500:], "err")
-        return None
-    zone = "APP" if 0x01010000 <= pc < 0x01030000 else ("BOOT" if 0x01000000 <= pc < 0x01010000 else "其他")
-    log(f"[3/4] pc=0x{pc:08X} -> 当前在 {zone}")
-    return zone
+
+    t0 = time.time()
+    last = None
+    while time.time() - t0 < max_s:
+        out = pycmd("-c", "halt", "-c", "reg pc",
+                    "-c", "read32 0x2000BD04", "-c", "read32 0x2000BD1C",
+                    "-c", "read32 0x2000BD38", "-c", "read32 0x2000BD74", "-c", "read32 0x2000BD78")
+        pc = None
+        for line in out.splitlines():
+            if line.startswith("pc ="):
+                pc = int(line.split("=")[1].strip(), 16)
+            for key in ("2000bd04:", "2000bd1c:", "2000bd38:", "2000bd74:", "2000bd78:"):
+                if line.startswith(key):
+                    log(f"[3/4] t+{int(time.time()-t0):02d}s {key[:-1]} = {line.split(':')[1].strip()}")
+        if pc is None:
+            time.sleep(3); continue
+        zone = "APP" if 0x01010000 <= pc < 0x01030000 else ("BOOT" if 0x01000000 <= pc < 0x01010000 else "其他")
+        if zone != last:
+            log(f"[3/4] t+{int(time.time()-t0):02d}s pc=0x{pc:08X} -> {zone}")
+            last = zone
+        if zone == "APP":
+            return zone, pc, int(time.time() - t0)
+        time.sleep(3)
+    return last or "未知", None, int(time.time() - t0)
 
 def job(target, fw):
     _state["t0"] = time.time()
@@ -142,9 +149,9 @@ def job(target, fw):
             log("[2/4] OTA 未成功", "err"); set_stage("失败:OTA", False); return
 
         set_stage("验证")
-        zone = step_verify()
+        zone, pc, secs = step_verify(120)
         if zone == "APP":
-            log("[4/4] ✅ 闭环通过：设备已回到 APP", "ok"); set_stage("通过", True)
+            log(f"[4/4] ✅ 闭环通过：设备已回到 APP（复位后 {secs} s）", "ok"); set_stage("通过", True)
         elif zone == "BOOT":
             log("[4/4] ❌ 设备停在 Boot（升级成功但没跳 APP）", "err"); set_stage("失败:停在Boot", False)
         else:
