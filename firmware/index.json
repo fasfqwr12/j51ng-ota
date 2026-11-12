@@ -14,16 +14,16 @@
       "mtime": 1794284066.1570833
     },
     {
-      "file": "S_app_9501-000-02150.hex",
+      "file": "S_app_v4.hex",
       "role": "app",
       "target": "S",
       "targetName": "蓝牙板 S",
-      "title": "S_app_9501-000-02150",
-      "size": 68520,
-      "fileSize": 192787,
-      "sha256": "bbda7e54dc4b5fec89569467f1c96c81b5550fb9c105e8cfd052676effd66d54",
+      "title": "S_app_v4 (v10 闭环验证)",
+      "size": 68720,
+      "fileSize": 193305,
+      "sha256": "256e40a8bf2f24bf388fd35035229beaa5d852364e00b9e6402a8a35ef0d4851",
       "version": "",
-      "mtime": 1794277238.7418208
+      "mtime": 1794461574.696581
     },
     {
       "file": "S_boot_rdts.hex",
