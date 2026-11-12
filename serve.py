@@ -54,31 +54,33 @@ def set_stage(s, ok=None):
 # ---------------- 闭环步骤 ----------------
 
 def step_enter_boot():
+    """发 53 A2 0xFF 让 APP 进 Boot。不等 ACK（实测被 0x06 周期帧挡住），
+    发完就关连接，由后面的扫描确认设备是否已进入 Boot。"""
     import asyncio
     from ota_ble import BleHost
 
     async def go():
-        for n in range(1, 7):
+        for n in range(1, 4):
             try:
                 h = BleHost("AIMTECH", SVC, WR, NF)
                 await h.connect()
                 h.raw_log.clear()
                 await h.write_bytes(ENTER)
-                await asyncio.sleep(1.5)
+                await asyncio.sleep(0.8)
                 raw = bytes(h.raw_log)
                 try: await h.close()
                 except Exception: pass
                 if raw.find(ACK) >= 0:
-                    log(f"[1/4] 进 Boot 第{n}次：APP 已接受 53A2，ACK=OK")
-                    return True
-                if raw.find(b"\xeb\x90") >= 0:
-                    # 收到 EB90 帧 = 设备本来就在 Boot，无需再进
-                    log(f"[1/4] 设备已在 Boot（收到 EB90 帧），跳过进 Boot")
-                    return True
-                log(f"[1/4] 进 Boot 第{n}次无应答  raw={raw[:20].hex(' ')}")
+                    log(f"[1/4] 进 Boot：APP 回了 ACK")
+                elif raw.find(b"\xeb\x90") >= 0:
+                    log(f"[1/4] 设备本来就在 Boot（EB90）")
+                else:
+                    log(f"[1/4] 已发送进 Boot 命令（未取到 ACK，继续）")
+                return True
             except Exception as e:
-                log(f"[1/4] 进 Boot 第{n}次异常 {type(e).__name__}: {e}")
-                await asyncio.sleep(1.5)
+                log(f"[1/4] 第{n}次发送异常 {type(e).__name__}: {e}")
+                await asyncio.sleep(1.0)
+        log("[1/4] 无法连接设备", "err")
         return False
     return asyncio.run(go())
 
@@ -146,7 +148,21 @@ def job(target, fw):
         set_stage("OTA")
         ok = step_ota(target, fw)
         if not ok:
-            log("[2/4] OTA 未成功", "err"); set_stage("失败:OTA", False); return
+            log("[2/4] OTA 未成功，强制复位进 Boot 后重试一次…", "err")
+            # 直接写 RAM 请求标志再复位，保证设备一定回到 Boot（不依赖 APP 是否还能连）
+            subprocess.run([sys.executable, "-m", "pyocd", "commander", "-t", "n32wb031",
+                            "--pack", PACK, "-O", "connect_mode=attach",
+                            "-c", "halt",
+                            "-c", "write32 0x2000BC00 0x00B1234B",
+                            "-c", "write32 0x2000BC04 0xFF4EDCB4",
+                            "-c", "go", "-c", "exit"], capture_output=True)
+            subprocess.run([sys.executable, "-m", "pyocd", "reset", "-t", "n32wb031",
+                            "--pack", PACK, "-O", "connect_mode=under-reset"],
+                           capture_output=True)
+            time.sleep(10)
+            ok = step_ota(target, fw)
+        if not ok:
+            log("[2/4] 重试后仍未成功", "err"); set_stage("失败:OTA", False); return
 
         set_stage("验证")
         zone, pc, secs = step_verify(120)
@@ -205,6 +221,22 @@ class Handler(SimpleHTTPRequestHandler):
             _state.update(running=True, stage="启动", ok=None, t0=time.time())
             threading.Thread(target=job, args=(target, fw), daemon=True).start()
             return self._json({"ok": True, "target": target, "file": fw})
+        if u.path == "/api/abort":
+            # 释放 BLE：杀掉可能还挂着的 ota_ble_s 子进程
+            import subprocess as _sp
+            killed = 0
+            try:
+                out = _sp.run(["wmic","process","where",
+                               "name='python.exe' and commandline like '%ota_ble_s%'",
+                               "get","processid"], capture_output=True, text=True)
+                for tok in out.stdout.split():
+                    if tok.isdigit():
+                        _sp.run(["taskkill","/F","/PID",tok], capture_output=True); killed += 1
+            except Exception:
+                pass
+            _state["running"] = False
+            log(f"[abort] 已中止任务并释放 BLE（结束 {killed} 个进程）", "err")
+            return self._json({"ok": True, "killed": killed})
         if u.path == "/api/reset":
             with _lock:
                 _lines.clear()
