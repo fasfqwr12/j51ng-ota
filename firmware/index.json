@@ -1,5 +1,5 @@
 {
-  "updated": 1794284066,
+  "updated": 1794462558,
   "items": [
     {
       "file": "M_9501-000-02166_v1.hex",
@@ -14,16 +14,28 @@
       "mtime": 1794284066.1570833
     },
     {
+      "file": "S_app_9501-000-02150.hex",
+      "role": "app",
+      "target": "S",
+      "targetName": "蓝牙板 S",
+      "title": "S_app_9501-000-02150",
+      "size": 68520,
+      "fileSize": 192787,
+      "sha256": "bbda7e54dc4b5fec89569467f1c96c81b5550fb9c105e8cfd052676effd66d54",
+      "version": "",
+      "mtime": 1794277238.7418208
+    },
+    {
       "file": "S_app_v4.bin",
       "role": "app",
       "target": "S",
       "targetName": "蓝牙板 S",
-      "title": "S_app_v4 (68720B 正确镜像)",
+      "title": "S_app_v4",
       "size": 68720,
       "fileSize": 68720,
       "sha256": "256e40a8bf2f24bf388fd35035229beaa5d852364e00b9e6402a8a35ef0d4851",
-      "version": "",
-      "mtime": 1794462558.413459
+      "version": "v4",
+      "mtime": 1794462558.379431
     },
     {
       "file": "S_boot_rdts.hex",

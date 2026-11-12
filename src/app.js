@@ -385,14 +385,24 @@ async function loadLibrary(){
     if(!items.length){ box.innerHTML='<div class="hint">库为空</div>'; return; }
     const ota=items.filter(it=>it.role!=="boot");
     const boot=items.filter(it=>it.role==="boot");
+    /* 生成时间：index.json 的 mtime（unix 秒）→ 本地 "YYYY-MM-DD HH:mm" */
+    const fmtTime=(m)=>{
+      if(!m) return "—";
+      const d=new Date(m*1000);
+      const p2=n=>String(n).padStart(2,"0");
+      return `${d.getFullYear()}-${p2(d.getMonth()+1)}-${p2(d.getDate())} ${p2(d.getHours())}:${p2(d.getMinutes())}`;
+    };
     const row=(it,i,canOta)=>{
       const kb=(it.size/1024).toFixed(1);
       const tail = canOta
         ? `<button data-i="${i}">选用</button>`
         : `<span class="tag swd">仅 SWD</span>`;
+      const tstr = fmtTime(it.mtime);
       return `<div class="fw${canOta?"":" noota"}">
         <span class="tag">${it.targetName}</span>
-        <div class="nm"><b>${it.title}</b><span>${kb} KB · ${it.sha256.slice(0,12)}…</span></div>
+        <div class="nm"><b>${it.title}</b>
+          <span>${kb} KB · ${tstr} · ${it.sha256.slice(0,12)}…</span>
+        </div>
         <a class="dl" href="./firmware/${encodeURIComponent(it.file)}" download>下载</a>
         ${tail}
       </div>`;
@@ -419,7 +429,9 @@ async function useLibItem(it, btn){
     await loadFile(new File([buf], it.file));
     const segBtn=[...$("seg").children].find(x=>x.dataset.t===it.target);
     if(segBtn) segBtn.click();
-    log(`已选用 ${it.title}（${it.targetName}）`,"ok");
+    const __d=new Date((it.mtime||0)*1000), __p2=n=>String(n).padStart(2,"0");
+    const __ts=it.mtime?`${__d.getFullYear()}-${__p2(__d.getMonth()+1)}-${__p2(__d.getDate())} ${__p2(__d.getHours())}:${__p2(__d.getMinutes())}`:"—";
+    log(`已选用 ${it.title}（${it.targetName}）· ${it.size} B · 生成于 ${__ts}`,"ok");
   }catch(e){
     log("下载失败："+e.message,"err");
   }finally{
