@@ -131,7 +131,16 @@ function gatt(timeoutMs){
     const dv=ev.target.value;
     const a=new Uint8Array(dv.buffer,dv.byteOffset,dv.byteLength);
     let i=0;
-    while(i+7<=a.length){
+    while(i+4<=a.length){
+      /* ★ APP 层应答 54 A1 | len(2,LE) | cmd | payload(len-3) | cs(2) */
+      if(a[i]===0x54 && a[i+1]===0xA1){
+        const flen = rd16(a,i+2);
+        if(i+4+flen<=a.length){
+          const cmd=a[i+4], pl=a.slice(i+5, i+5+(flen-3));
+          __metaQ.push({cmd, p:pl});
+          i += 4 + flen; continue;
+        }
+      }
       if(a[i]===0xEB && a[i+1]===0x90){
         const len=rd16(a,i+4);
         if(i+7+len<=a.length){
@@ -356,6 +365,43 @@ async function sha256(u8){
   return new Uint8Array(await crypto.subtle.digest("SHA-256", u8));
 }
 
+
+/* ---------------- APP 层命令（53A2 / 54A1） ---------------- */
+let __metaQ = [];          /* 收到的 54A1 应答 */
+
+function appFrame(cmd, payload){
+  const pl = payload || new Uint8Array(0);
+  const n  = pl.length + 3;                       /* cmd + payload + cs */
+  const f  = new Uint8Array(4 + 1 + pl.length + 2);
+  f[0]=0x53; f[1]=0xA2; f[2]=n & 0xFF; f[3]=(n>>8) & 0xFF; f[4]=cmd;
+  f.set(pl, 5);
+  let s=0; for(let i=0;i<5+pl.length;i++) s+=f[i];
+  f[5+pl.length]   = s & 0xFF;
+  f[6+pl.length]   = (s>>8) & 0xFF;
+  return f;
+}
+
+/* 读设备当前运行镜像的 J5AA 头（命令 0xFE，回 48B 原始头） */
+async function readDeviceMeta(ms=3000){
+  __metaQ = __metaQ.filter(x=>x.cmd!==0xFE);
+  const f = appFrame(0xFE, null);
+  try{
+    if(chW.writeValueWithoutResponse) await chW.writeValueWithoutResponse(f);
+    else await chW.writeValue(f);
+  }catch(e){ log("读镜像头下发失败："+e.message,"dim"); return null; }
+  const t0=Date.now();
+  while(Date.now()-t0<ms){
+    const i=__metaQ.findIndex(x=>x.cmd===0xFE);
+    if(i>=0){
+      const pl=__metaQ.splice(i,1)[0].p;
+      if(pl.length < 48) return {none:true};      /* 旧镜像，无头 */
+      return parseJ5AA(pl, 0);
+    }
+    await sleep(30);
+  }
+  return null;
+}
+
 /* ---------------- J5AA 镜像头（单一事实源，只读不算） ----------------
  * 规范: 01_docs/IMAGE_HEADER_SPEC → 48B @ image+0x200, 小端
  * 0x00 magic "J5AA"  0x04 header_ver  0x06 image_type(0=APP 1=BOOT)
@@ -380,31 +426,30 @@ function crc32(u8){
   return (crc ^ 0xFFFFFFFF) >>> 0;
 }
 
-function parseJ5AA(fw){
-  if(!fw || fw.length < J5AA_OFF + J5AA_SIZE) return null;
-  const dv = new DataView(fw.buffer, fw.byteOffset, fw.byteLength);
-  const magic = dv.getUint32(J5AA_OFF, true);
-  if(magic !== J5AA_MAGIC) return null;
-  const hdr = fw.subarray(J5AA_OFF, J5AA_OFF + 0x2C);
-  const hcrcStored = dv.getUint32(J5AA_OFF + 0x2C, true);
-  const hcrcCalc   = crc32(hdr);
+function parseJ5AA(buf, off){
+  off = (off===undefined) ? J5AA_OFF : off;
+  if(!buf || buf.length < off + J5AA_SIZE) return null;
+  const dv = new DataView(buf.buffer, buf.byteOffset, buf.byteLength);
+  if(dv.getUint32(off, true) !== J5AA_MAGIC) return null;
+  const hcrcStored = dv.getUint32(off + 0x2C, true);
+  const hcrcCalc   = crc32(buf.subarray(off, off + 0x2C));
   const model = [];
   for(let i=0;i<12;i++){
-    const b = fw[J5AA_OFF + 0x20 + i];
+    const b = buf[off + 0x20 + i];
     if(!b) break;
     model.push(String.fromCharCode(b));
   }
-  const fwv = dv.getUint16(J5AA_OFF + 0x08, true);
+  const fwv = dv.getUint16(off + 0x08, true);
   return {
-    headerVer : dv.getUint16(J5AA_OFF + 0x04, true),
-    imageType : fw[J5AA_OFF + 0x06],
-    target    : fw[J5AA_OFF + 0x07],
+    headerVer : dv.getUint16(off + 0x04, true),
+    imageType : buf[off + 0x06],
+    target    : buf[off + 0x07],
     fwVersion : fwv,
     verText   : ((fwv>>8)&0xFF) + "." + (fwv&0xFF),
-    hwVersion : dv.getUint16(J5AA_OFF + 0x0A, true),
-    size      : dv.getUint32(J5AA_OFF + 0x0C, true),
-    payloadCrc: dv.getUint32(J5AA_OFF + 0x10, true),
-    base      : dv.getUint32(J5AA_OFF + 0x14, true),
+    hwVersion : dv.getUint16(off + 0x0A, true),
+    size      : dv.getUint32(off + 0x0C, true),
+    payloadCrc: dv.getUint32(off + 0x10, true),
+    base      : dv.getUint32(off + 0x14, true),
     model     : model.join(""),
     hcrcStored, hcrcCalc,
     hcrcOk    : hcrcStored === hcrcCalc
@@ -772,12 +817,27 @@ async function startUpgrade(){
     }else{
       throw new Error("已派发但设备 30 s 内未回来，请断电重启确认");
     }
-    /* 版本确认：设备目前没有"回报 APP 镜像头"的命令，
-     * 只能确认它回到了 APP 并能应答。此处如实标注，不假装校验过。 */
-    if(mode==="app" && window.__j5aa){
-      log(`    已下发 v${window.__j5aa.verText} · ${window.__j5aa.size} B`
-        + ` · crc ${window.__j5aa.payloadCrc.toString(16).toUpperCase()}`
-        + `（版本回读待设备支持）`,"dim");
+    /* ★ 版本确认：回读设备当前镜像的 J5AA 头，与刚下发的逐字段比对。
+     * 只有 payload_size + payload_crc32 都对上，才算真的升级成功。 */
+    if(mode==="app"){
+      const sent = window.__j5aa;
+      const h8 = v => (v>>>0).toString(16).padStart(8,"0").toUpperCase();
+      log("    回读设备镜像头，确认运行版本…","dim");
+      const dev = await readDeviceMeta(3000);
+      if(!dev){
+        log("[7] ⚠ 版本未确认：设备未回应镜像头请求（0xFE）","err");
+        chip("版本未确认","");
+      }else if(dev.none){
+        log("[7] ⚠ 版本未确认：设备回报没有 J5AA 头（旧镜像）","err");
+        chip("版本未确认","");
+      }else if(sent && dev.size===sent.size && dev.payloadCrc===sent.payloadCrc){
+        log(`[7] ✅ 版本已确认：设备运行 v${dev.verText} · ${dev.size} B · crc ${h8(dev.payloadCrc)}（与下发一致）`,"st");
+        chip("升级成功 · 已确认","on");
+      }else{
+        log(`[7] ❌ 版本不匹配：设备 ${dev.size} B / crc ${h8(dev.payloadCrc)}`
+          + `　下发 ${sent?sent.size:"?"} B / crc ${sent?h8(sent.payloadCrc):"?"}`,"err");
+        chip("版本不匹配","");
+      }
     }
     const __tot=((performance.now()-t0)/1000).toFixed(1);
     $("tAll").textContent=__tot+" s";
@@ -830,6 +890,11 @@ if(!navigator.bluetooth){
 
 /* ---------------- 对外 API（便于自动化/联调） ---------------- */
 window.ota = {
+  /* 调试/自检入口：镜像头解析与设备回读 */
+  parseJ5AA(buf, off){ return parseJ5AA(buf, off); },
+  appFrame(cmd, payload){ return appFrame(cmd, payload); },
+  readMeta(){ return readDeviceMeta(3000); },
+  sentMeta(){ return window.__j5aa || null; },
   status(){
     return {
       connected: !!(device && device.gatt.connected),
