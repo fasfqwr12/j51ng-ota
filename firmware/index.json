@@ -14,16 +14,16 @@
       "mtime": 1794284066.1570833
     },
     {
-      "file": "S_app_v4.hex",
+      "file": "S_app_v4.bin",
       "role": "app",
       "target": "S",
       "targetName": "蓝牙板 S",
-      "title": "S_app_v4 (v10 闭环验证)",
+      "title": "S_app_v4 (68720B 正确镜像)",
       "size": 68720,
-      "fileSize": 193305,
+      "fileSize": 68720,
       "sha256": "256e40a8bf2f24bf388fd35035229beaa5d852364e00b9e6402a8a35ef0d4851",
       "version": "",
-      "mtime": 1794461574.696581
+      "mtime": 1794462558.413459
     },
     {
       "file": "S_boot_rdts.hex",
