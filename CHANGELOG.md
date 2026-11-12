@@ -1,0 +1,1 @@
+| 2026-11-12 | ok-1112-1 | 网页上位机 + 带 API 的服务端(serve.py)。POST /api/ota 一键跑闭环（进Boot→OTA→复位→SWD验证回APP），GET /api/status、/api/log 供页面右下角"服务端闭环日志"面板实时显示，POST /api/abort 释放 BLE。提速：地址缓存跳过扫描、扫描5s→1.2s、握手后400ms再发0x0201+重发一次、轮询等广播替代固定9s。整轮 39~67 s，OTA 本体 11.4 s。 |
