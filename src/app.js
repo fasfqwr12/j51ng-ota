@@ -16,7 +16,12 @@ let frames=[], running=false, abort=false, target="M", fw=null;
 let hsReady=null;
 let switching=false;
 let writeChain=Promise.resolve();
-const TUNE = { win:32, gap:4 };   // 实测：win=8 数据 8.1s；win=32 → 5.4s（与桌面版持平）   // 正在主动断开切 Boot，别报错   // {r, t}：已握手但还没发参数，20 秒内可直接复用
+const TUNE = { win:32, gap:4 };
+/* ★ 单包负载上限。S 板(N32WB031)在 228 B 分包时数据能传完、ACK 全正常，
+ *   但设备端算出的 SHA 与主机不一致（0x0402=0x11）。
+ *   实测只有 128 B 分包能通过校验（68720 B → 537 包）。
+ *   不要因为握手报了 maxpkt=228 就用 228。 */
+const PKT_CAP = 128;   // 实测：win=8 数据 8.1s；win=32 → 5.4s（与桌面版持平）   // 正在主动断开切 Boot，别报错   // {r, t}：已握手但还没发参数，20 秒内可直接复用
 
 /* ---------------- 帧工具 ---------------- */
 function crc8(d){
@@ -475,7 +480,7 @@ async function startUpgrade(){
   $("log").innerHTML="";
   const t0=performance.now();
   const img=fw, win=TUNE.win, gap=TUNE.gap;
-  let pkt=231, total=0;
+  let pkt=PKT_CAP, total=0;
 
   $("sPct").textContent="0%"; $("bar").style.width="0%";
   $("sPkt").textContent=`0/${total}`; $("sSpd").textContent="0"; $("sRtx").textContent="0";
@@ -534,9 +539,11 @@ async function startUpgrade(){
 
     // 设备会把包长向下 4 字节对齐（pkt & ~3），必须按对齐后的值分包
     const devMax = r.length>=23 ? rd16(r,21) : 0;
-    let want = devMax ? Math.min(231, devMax) : 231;
+    let want = devMax ? Math.min(PKT_CAP, devMax) : PKT_CAP;
     pkt = want & ~3;
     if(pkt<4) pkt=4;
+    if(devMax && devMax>pkt)
+      log(`    设备报 maxpkt=${devMax}，但按 ${pkt} B 分包（228 B 会导致 SHA 校验失败）`,"dim");
     total = Math.ceil(img.length/pkt);
     log(`[1b] 分包 pkt=${pkt} B × ${total}（设备 maxpkt=${devMax||"?"}）`,"dim");
     $("sPkt").textContent = `0/${total}`;
