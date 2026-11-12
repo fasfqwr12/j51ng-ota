@@ -102,19 +102,27 @@ let __gattLock=null;
 function gatt(timeoutMs){
   if(__gattLock) return __gattLock;
   __gattLock=(async()=>{
-  server = device.gatt.connected ? device.gatt : await withTimeout(device.gatt.connect(), timeoutMs||8000, "连接");
+  if(device.gatt.connected){
+    /* ★ 复位后 Chrome 的 connected 可能卡在 true 但服务已失效。
+     * 主动断开再重连，拿到全新 GATT 会话，避免复用死会话。 */
+    try{ device.gatt.disconnect(); }catch(_){}
+    await sleep(150);
+  }
+  server = await withTimeout(device.gatt.connect(), timeoutMs||8000, "连接");
   let svc;
   try{
     svc = await server.getPrimaryService(SVC);
   }catch(e){
-    // 链路是陈旧的：踢一次，让下一次循环重新建立干净连接
     try{ device.gatt.disconnect(); }catch(_){}
     throw e;
   }
   chW = await svc.getCharacteristic(CH_W);
   chN = await svc.getCharacteristic(CH_N);
   await chN.startNotifications();
-  chN.addEventListener("characteristicvaluechanged", ev=>{
+  /* 重连会拿到新的 characteristic 对象；用标记避免同一对象重复绑定 */
+  if(!chN.__j51ngBound){
+    chN.__j51ngBound = true;
+    chN.addEventListener("characteristicvaluechanged", ev=>{
     const dv=ev.target.value;
     const a=new Uint8Array(dv.buffer,dv.byteOffset,dv.byteLength);
     let i=0;
@@ -131,11 +139,25 @@ function gatt(timeoutMs){
       appendDevLog(a[i]);
       i++;
     }
-  });
+    });
+  }
   })().finally(()=>{ __gattLock=null; });
   return __gattLock;
 }
+let __discWaiters=[];
+function waitGattDisconnect(ms){
+  return new Promise(res=>{
+    let done=false;
+    const fin=(why)=>{ if(done) return; done=true;
+      __discWaiters=__discWaiters.filter(x=>x!==fin); clearTimeout(tm); res(why); };
+    __discWaiters.push(fin);
+    const tm=setTimeout(()=>fin("timeout"), ms);
+  });
+}
 function onDisconnect(){
+  /* ★ 不论是否在 switching，都要唤醒「等断开」的一方，
+   * 否则进 Boot 后的重连会一直等到超时。 */
+  for(const f of __discWaiters.slice()) f("event");
   if(switching){ chip("切换中…","work"); return; }
   chip("已断开",""); setBadge(null);
   $("hMeta").textContent="连接已断开";
@@ -253,8 +275,15 @@ function enterBoot(){
     }
   }
   if(!sent){ log("进 Boot 命令发送失败","err"); return null; }
-  await sleep(2600);
   switching=true;
+  /* ★ 关键：设备收到 53A2 会复位，Chrome 必然收到 gattserverdisconnected。
+   * 先等这个事件（最多 4 s，超时就主动断开），再重连；
+   * 原来固定 sleep(2600) 后直接 gatt()，会复用 connected=true 的死会话，
+   * 每轮都报 "GATT operation failed for unknown reason."。 */
+  const why = await waitGattDisconnect(4000);
+  if(why==="timeout"){ try{ device.gatt.disconnect(); }catch(_){} }
+  log(`链路已释放(${why})，等待设备 Boot 广播…`,"dim");
+  await sleep(1200);
   for(let i=1;i<=30;i++){
     try{
       if(i>1) await sleep(400);
@@ -287,21 +316,13 @@ async function probeMode(){
     hsReady = {r, t: Date.now()};
     return "boot";
   }
+  /* ★ 只识别模式，不自动进 Boot。
+   * 进 Boot 是「开始升级」才做的动作：连接/读状态不该改变设备运行模式，
+   * 否则用户只是想看一眼状态，设备就被踢进 bootloader 不再正常工作。 */
   setBadge("app");
-  $("hMeta").textContent = "APP 模式，正在切换进 Boot…";
-  log("模式：APP（握手无应答）","dim");
-  r = await enterBoot();
-  if(r){
-    setBadge("boot");
-    const hw=new TextDecoder().decode(r.slice(1,17)).replace(/[\uFFFD\x00]/g,"");
-    $("kHw").textContent = hw || "—";
-    $("kVer").textContent = r.length>=21 ? [...r.slice(17,21)].map(b=>b.toString(16).padStart(2,"0")).join(".") : "—";
-    $("hMeta").textContent = "已进入 Boot 模式";
-    hsReady = {r, t: Date.now()};
-    return "boot";
-  }
-  $("hMeta").textContent = "切换 Boot 失败，请重试";
-  log("未能进入 Boot","err");
+  $("hMeta").textContent = "APP 模式 · 点「开始升级」将自动进入 Boot";
+  log("模式：APP（握手无应答，未切换）","dim");
+  hsReady = null;
   return "app";
 }
 
@@ -452,6 +473,17 @@ async function startUpgrade(){
   window.__perf={wr:[],rounds:[]};
   log(`目标 ${target} · 镜像 ${img.length} B · win=${TUNE.win} gap=${TUNE.gap}`);
   try{
+    // ★ 开始升级才让设备进 Boot：先只识别模式（不改设备状态），
+    //    APP 才发 53A2；已在 boot 则直接复用握手结果。
+    const curMode = await probeModeOnly(1500);
+    if(curMode === "app"){
+      stage("切换 Boot");
+      log("当前在 APP，发送进 Boot 命令…","st");
+      const bootR = await enterBoot();
+      if(!bootR) throw new Error("自动进 Boot 失败");
+      setBadge("boot");
+      hsReady = {r: bootR, t: Date.now()};
+    }
     // 设备刚重启过，链路可能还没恢复：先确保连通，且不复用旧握手
     if(!(device && device.gatt.connected)){
       stage("重连");
