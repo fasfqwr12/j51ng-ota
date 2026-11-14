@@ -311,35 +311,29 @@ function enterBoot(){
   /* ★ 交给设备：APP 收到握手会自行复位，链路由设备侧断开，
    * 这里只"等" gattserverdisconnected 事件，不主动 disconnect。 */
   const why = await waitGattDisconnect(12000);
-  log(`设备侧断开(${why})，等待 Boot 广播后重连…`,"dim");
+  log(`设备侧断开(${why})，开始扫描等待设备重新广播（上限 20 s）…`,"dim");
 
-  for(let i=1;i<=30;i++){
+  /* ★ 断开后：反复尝试连接（Chrome 每次 connect 都会扫描），
+   * 连上就握手确认 ff.ff.ff.ff；总时长上限 20 s。 */
+  const t0=performance.now();
+  while(performance.now()-t0 < 20000){
     try{
-      if(i>1) await sleep(400);
-      const __t=performance.now();
-      /* 还没断（例如握手没生效）：再补一枪握手，不要断链 */
-      if(device.gatt.connected && chW){
-        frames.length=0;
-        const r=await request(T.HS, devInfo(target), T.HSR, 1200);
-        if(r){
-          const v=[...r.slice(17,21)].map(b=>b.toString(16).padStart(2,"0")).join(".");
-          if(v.startsWith("ff.ff")){ switching=false; log(`已进入 Boot 模式（第 ${i} 次，${((performance.now()-__t)/1000).toFixed(1)} s）`,"ok"); return r; }
-        }
-        await sleep(600); continue;
-      }
-      await gatt(1500);
-      await sleep(300);
+      if(!(device && device.gatt && device.gatt.connected)) await gatt(2500, true);
       frames.length=0;
       const r=await request(T.HS, devInfo(target), T.HSR, 1200);
       if(r){
         const v=[...r.slice(17,21)].map(b=>b.toString(16).padStart(2,"0")).join(".");
-        if(v.startsWith("ff.ff")){ switching=false; log(`已进入 Boot 模式（第 ${i} 次尝试，${((performance.now()-__t)/1000).toFixed(1)} s）`,"ok"); return r; }
-        log(`    握手版本 ${v}，仍在 APP，继续等复位…`,"dim");
+        if(v.startsWith("ff.ff")){
+          switching=false;
+          log(`已发现 Boot 并重连（${((performance.now()-t0)/1000).toFixed(1)} s）`,"ok");
+          return r;
+        }
       }
-    }catch(e){ if(i%2===0||i<3) log(`    等待重连(${i})… ${e.message}`,"dim"); }
-    await sleep(600);
+    }catch(e){ /* 还没广播出来，继续扫 */ }
+    await sleep(700);
   }
   switching=false;
+  log("20 s 内没等到 Boot 广播，交班失败","err");
   return null;
   })().finally(()=>{ __bootLock=null; });
   return __bootLock;
@@ -634,7 +628,7 @@ async function probeModeOnly(timeout=2000){
   return "app";
 }
 /* 设备复位后自动重连：每 1.2 s 试一次，直到回来或超时 */
-async function waitReconnect(maxMs=30000, waitDiscMs=12000, trustApp=false){
+async function waitReconnect(maxMs=20000, waitDiscMs=12000, trustApp=false){
   const t0=performance.now();
 
   /* ★ 阶段1：先等"真实断链"。
@@ -655,7 +649,7 @@ async function waitReconnect(maxMs=30000, waitDiscMs=12000, trustApp=false){
   while(performance.now()-t0<maxMs){
     n++;
     try{
-      await gatt(1500);
+      await gatt(2500, true);
       const secs=((performance.now()-t0)/1000).toFixed(1);
       if(trustApp){
         log(`    重连成功（第 ${n} 次，${secs} s）`,"ok");
@@ -871,7 +865,7 @@ async function startUpgrade(){
 
     stage("等待设备重启");
     log("[6] 设备复位中，等待重新连接…","dim");
-    const mode = await waitReconnect(30000, 12000, true);
+    const mode = await waitReconnect(20000, 12000, true);
     if(mode==="app"){
       log("[7] ✅ 升级成功：设备已重启并运行新 APP","st");
       chip("升级成功","on");
