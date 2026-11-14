@@ -50,18 +50,6 @@
       "mtime": 1794621652.7451396
     },
     {
-      "file": "S_app_9501-000-02150.hex",
-      "role": "app",
-      "target": "S",
-      "targetName": "蓝牙板 S",
-      "title": "S_app_9501-000-02150",
-      "size": 68520,
-      "fileSize": 192787,
-      "sha256": "bbda7e54dc4b5fec89569467f1c96c81b5550fb9c105e8cfd052676effd66d54",
-      "version": "",
-      "mtime": 1794277238.7418208
-    },
-    {
       "file": "S_app_latest.bin",
       "role": "app",
       "target": "S",
@@ -72,18 +60,6 @@
       "sha256": "bf0061b20575b2ba5aab7b82ddf6284f9b1b02e1b15d02b14311d5b1bfe2bae5",
       "version": "",
       "mtime": 1794643722.9914734
-    },
-    {
-      "file": "S_app_v4.bin",
-      "role": "app",
-      "target": "S",
-      "targetName": "蓝牙板 S",
-      "title": "S_app_v4",
-      "size": 68720,
-      "fileSize": 68720,
-      "sha256": "256e40a8bf2f24bf388fd35035229beaa5d852364e00b9e6402a8a35ef0d4851",
-      "version": "v4",
-      "mtime": 1794462558.379431
     },
     {
       "file": "S_boot_rdts.hex",
