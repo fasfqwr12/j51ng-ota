@@ -27,6 +27,14 @@ PACK  = r"E:\tof\xuRxuG\05_scripts\tools\pyocd-packs\Nationstech.N32WB03x_DFP.1.
 sys.path.insert(0, str(TOOLS))
 sys.path.insert(0, str(ART))
 
+# Windows 控制台默认 GBK，日志里的 ✅/⚠ 等字符会让 print 抛 UnicodeEncodeError，
+# 进而把已经成功的任务判成"异常"。改成不可编码字符替换，日志永不打断流程。
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(errors="replace")
+    except Exception:
+        pass
+
 SVC = "00002760-08c2-11e1-9073-0e8ac72e1001"
 WR  = "00002760-08c2-11e1-9073-0e8ac72e0001"
 NF  = "00002760-08c2-11e1-9073-0e8ac72e0002"
