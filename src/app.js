@@ -188,7 +188,8 @@ let __devLog = "";
 function appendDevLog(c){
   if(c===0x0A){ flushDevLog(); return; }
   if(c===0x0D){ return; }
-  if((c>=0x20 && c<0x7F) || c>=0x80){ __devLog += String.fromCharCode(c); }
+  /* 只保留可打印 ASCII：0x80 以上的二进制字节会把日志刷成一堆乱码 */
+  if(c>=0x20 && c<0x7F){ __devLog += String.fromCharCode(c); }
   if(__devLog.length>=200){ flushDevLog(); }
 }
 function flushDevLog(){
@@ -613,7 +614,9 @@ async function probeModeOnly(timeout=2000){
       const v = r.length>=21 ? [...r.slice(17,21)].map(b=>b.toString(16).padStart(2,"0")).join(".") : "";
       return v.startsWith("ff.ff") ? "boot" : "app";
     }
-    await sleep(300);
+    /* 复用链路死了就重连再试（gatt() 会主动断开旧会话拿新的），别在原地空转 */
+    try{ await gatt(4000); }catch(_){}
+    await sleep(200);
   }
   return "app";
 }
@@ -718,7 +721,13 @@ async function startUpgrade(){
         setBadge("boot");
       }
     }
-    if(r[0]!==0) throw new Error("握手状态 0x"+r[0].toString(16));
+    if(r[0]!==0){
+      const st=r[0];
+      let msg="握手状态 0x"+st.toString(16);
+      if(st===0xE1) msg="设备在 Boot，只接受『蓝牙板 S』——请把目标切到蓝牙板 S 再点开始升级（0xE1=目标不匹配）";
+      else if(st===0x10) msg="握手被拒 0x10（参数/尺寸错误）";
+      throw new Error(msg);
+    }
     $("tHs").textContent=((performance.now()-t0)/1000).toFixed(1)+" s";
     log("[1] 握手成功","st");
 
