@@ -276,6 +276,9 @@ function enterBoot(){
   if(__bootLock) return __bootLock;
   __bootLock=(async()=>{
   log("交班进 Boot：发握手，APP 收到即复位（新固件无 53A2）","dim");
+  /* 复用上一条连接常是死会话：首次写入没有应答，也收不到断链事件。
+   * 先主动断开再重连一次，拿到全新的 GATT 和特征对象。 */
+  try{ if(device && device.gatt && device.gatt.connected){ device.gatt.disconnect(); await sleep(400); } }catch(_){}
   let sent=false;
   for(let k=1;k<=4 && !sent;k++){
     try{
@@ -302,7 +305,7 @@ function enterBoot(){
    * 先等这个事件（最多 9 s，超时就主动断开），再重连；
    * 原来固定 sleep(2600) 后直接 gatt()，会复用 connected=true 的死会话，
    * 每轮都报 "GATT operation failed for unknown reason."。 */
-  const why = await waitGattDisconnect(9000);
+  const why = await waitGattDisconnect(5000);
   if(why==="timeout"){ try{ device.gatt.disconnect(); }catch(_){} }
   log(`链路已释放(${why})，等待设备 Boot 广播…`,"dim");
   await sleep(1200);
@@ -600,12 +603,19 @@ async function useLibItem(it, btn){
 
 /* 只读模式判断：握手有应答=Boot，无应答=APP（不主动切 Boot） */
 async function probeModeOnly(timeout=2000){
-  frames.length=0;
-  const r = await request(T.HS, devInfo(target), T.HSR, timeout);
-  if(!r) return "app";
-  /* 新固件 APP 也会应答 0x0102，只能按版本判：ff.ff.ff.ff = Boot */
-  const v = r.length>=21 ? [...r.slice(17,21)].map(b=>b.toString(16).padStart(2,"0")).join(".") : "";
-  return v.startsWith("ff.ff") ? "boot" : "app";
+  /* 首次握手常常无应答（复用死会话 / 设备刚复位），单次就判 APP 会误判。
+   * 最多试 3 次；仍无应答按 APP 处理 —— enterBoot 里有"已在 Boot 直接返回"的快路。 */
+  for(let k=0;k<3;k++){
+    frames.length=0;
+    const r = await request(T.HS, devInfo(target), T.HSR, k===0?timeout:1200);
+    if(r){
+      /* 新固件 APP 也会应答 0x0102，只能按版本判：ff.ff.ff.ff = Boot */
+      const v = r.length>=21 ? [...r.slice(17,21)].map(b=>b.toString(16).padStart(2,"0")).join(".") : "";
+      return v.startsWith("ff.ff") ? "boot" : "app";
+    }
+    await sleep(300);
+  }
+  return "app";
 }
 /* 设备复位后自动重连：每 1.2 s 试一次，直到回来或超时 */
 async function waitReconnect(maxMs=30000, waitDiscMs=12000, trustApp=false){
