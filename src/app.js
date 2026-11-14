@@ -928,6 +928,16 @@ function applyTheme(t){
 applyTheme(localStorage.getItem("j51ng-theme")||"olive");
 $("themes").onclick=e=>{ const b=e.target.closest("button"); if(b) applyTheme(b.dataset.th); };
 
+/* ★ 刷新/关闭页面必须主动断链：
+ * Chrome 在页面导航时不一定发链路终止，设备侧还以为"有人连着"→ 停广播 →
+ * 新打开的页就扫不到设备（17:26 那次就是刷新时还连着）。
+ * 这里补一刀，刷新前后都能立刻重连。 */
+function releaseBle(){
+  try{ if(device && device.gatt && device.gatt.connected) device.gatt.disconnect(); }catch(_){}
+}
+window.addEventListener("pagehide", releaseBle);
+window.addEventListener("beforeunload", releaseBle);
+
 /* 能力检测 */
 if(!navigator.bluetooth){
   log("当前浏览器不支持 Web Bluetooth：请用安卓 Chrome / Edge，并确保是 https 页面","err");
