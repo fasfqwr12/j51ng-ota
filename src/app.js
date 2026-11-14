@@ -103,22 +103,27 @@ function withTimeout(p, ms, what){
   ]);
 }
 
-let __gattLock=null;
+let __gattLock=null, __hadConnectError=false;
 function gatt(timeoutMs){
   if(__gattLock) return __gattLock;
   __gattLock=(async()=>{
+  /* gatt() 会先断旧会话拿新的；对已失效会话直接跳过 connect 重试 */
   if(device.gatt.connected){
     /* ★ 复位后 Chrome 的 connected 可能卡在 true 但服务已失效。
      * 主动断开再重连，拿到全新 GATT 会话，避免复用死会话。 */
     try{ device.gatt.disconnect(); }catch(_){}
     await sleep(150);
+  } else if(__hadConnectError){
+    await sleep(300);
   }
   server = await withTimeout(device.gatt.connect(), timeoutMs||8000, "连接");
+  __hadConnectError=false;
   let svc;
   try{
     svc = await server.getPrimaryService(SVC);
   }catch(e){
     try{ device.gatt.disconnect(); }catch(_){}
+    __hadConnectError=true;
     throw e;
   }
   chW = await svc.getCharacteristic(CH_W);
@@ -173,6 +178,12 @@ function onDisconnect(){
    * 否则进 Boot 后的重连会一直等到超时。 */
   for(const f of __discWaiters.slice()) f("event");
   if(switching){ chip("切换中…","work"); return; }
+  if(running){
+    /* 升级中的断开是自断自连（gatt() 清死会话 / 等设备复位），
+     * 不是意外掉线，别刷红字吓人 */
+    log("蓝牙连接断开（自断重连中…）","dim");
+    return;
+  }
   chip("已断开",""); setBadge(null);
   $("hMeta").textContent="连接已断开";
   $("btnDisc").disabled=true; $("btnProbe").disabled=true;
