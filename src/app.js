@@ -103,27 +103,27 @@ function withTimeout(p, ms, what){
   ]);
 }
 
-let __gattLock=null, __hadConnectError=false;
-function gatt(timeoutMs){
+let __gattLock=null;
+/* force=true 才主动断旧会话；默认复用健康连接。
+ * 之前每次调用都 disconnect→connect，升级一开始就连断两次，
+ * 设备侧广播来不及恢复，直接导致 "Connection attempt failed"。 */
+function gatt(timeoutMs, force){
   if(__gattLock) return __gattLock;
   __gattLock=(async()=>{
-  /* gatt() 会先断旧会话拿新的；对已失效会话直接跳过 connect 重试 */
+  if(device.gatt.connected && !force && server && chW && chN){
+    return;                     /* 会话还在、特征都在：直接用，不动链路 */
+  }
   if(device.gatt.connected){
-    /* ★ 复位后 Chrome 的 connected 可能卡在 true 但服务已失效。
-     * 主动断开再重连，拿到全新 GATT 会话，避免复用死会话。 */
     try{ device.gatt.disconnect(); }catch(_){}
-    await sleep(150);
-  } else if(__hadConnectError){
-    await sleep(300);
+    await sleep(200);
   }
   server = await withTimeout(device.gatt.connect(), timeoutMs||8000, "连接");
-  __hadConnectError=false;
   let svc;
   try{
     svc = await server.getPrimaryService(SVC);
   }catch(e){
     try{ device.gatt.disconnect(); }catch(_){}
-    __hadConnectError=true;
+    chW=null; chN=null; server=null;
     throw e;
   }
   chW = await svc.getCharacteristic(CH_W);
@@ -174,14 +174,15 @@ function waitGattDisconnect(ms){
   });
 }
 function onDisconnect(){
+  /* 链路没了：把会话对象全部作废，下次 gatt() 才会真正重连 */
+  server=null; chW=null; chN=null;
   /* ★ 不论是否在 switching，都要唤醒「等断开」的一方，
    * 否则进 Boot 后的重连会一直等到超时。 */
   for(const f of __discWaiters.slice()) f("event");
   if(switching){ chip("切换中…","work"); return; }
   if(running){
-    /* 升级中的断开是自断自连（gatt() 清死会话 / 等设备复位），
-     * 不是意外掉线，别刷红字吓人 */
-    log("蓝牙连接断开（自断重连中…）","dim");
+    /* 升级中：设备复位/交班导致的正常断开，不是意外掉线 */
+    log("蓝牙连接断开（设备复位中…）","dim");
     return;
   }
   chip("已断开",""); setBadge(null);
@@ -287,45 +288,46 @@ let __bootLock=null;
 function enterBoot(){
   if(__bootLock) return __bootLock;
   __bootLock=(async()=>{
-  log("交班进 Boot：发握手，APP 收到即复位（新固件无 53A2）","dim");
-  /* 复用上一条连接常是死会话：首次写入没有应答，也收不到断链事件。
-   * 先主动断开再重连一次，拿到全新的 GATT 和特征对象。 */
-  try{ if(device && device.gatt && device.gatt.connected){ device.gatt.disconnect(); await sleep(400); } }catch(_){}
-  let sent=false;
-  for(let k=1;k<=4 && !sent;k++){
-    try{
-      // 设备重启后旧特征会失效，先确保链路和特征都是新的
-      if(k>1 || !(device && device.gatt.connected) || !chW) await gatt();
-      frames.length=0;
-      await send(T.HS, devInfo(target));
-      /* 已在 Boot：握手直接回 ff.ff.ff.ff，不用等断链 */
-      const rNow = await waitFrame(T.HSR, 1200);
-      if(rNow){
-        const v=[...rNow.slice(17,21)].map(b=>b.toString(16).padStart(2,"0")).join(".");
-        if(v.startsWith("ff.ff")){ log("设备已在 Boot，直接升级","ok"); return rNow; }
-        log(`当前在 APP（版本 ${v}），已触发交班复位…`,"dim");
-      }
-      sent=true;
-    }catch(e){
-      log(`交班握手写入失败(${k})：${e.message}`,"dim");
-      await sleep(1200);
-    }
+  log("交班进 Boot：发握手，等设备自己复位断开（不主动断链）","dim");
+  /* 只在"确实没连上"时才建链；已连且健康就直接复用，绝不断开重连 */
+  if(!(device && device.gatt && device.gatt.connected) || !chW){
+    try{ await gatt(6000); }catch(e){ log("连接失败："+e.message,"err"); return null; }
   }
-  if(!sent){ log("交班握手发送失败","err"); return null; }
+  frames.length=0;
+  try{
+    await send(T.HS, devInfo(target));
+  }catch(e){
+    log("交班握手写入失败："+e.message,"err"); return null;
+  }
+  /* 已在 Boot：握手直接回 ff.ff.ff.ff */
+  const rNow = await waitFrame(T.HSR, 1500);
+  if(rNow){
+    const v=[...rNow.slice(17,21)].map(b=>b.toString(16).padStart(2,"0")).join(".");
+    if(v.startsWith("ff.ff")){ log("设备已在 Boot，直接升级","ok"); return rNow; }
+    log(`当前在 APP（版本 ${v}），握手已下发，等设备自己复位…`,"dim");
+  }
+
   switching=true;
-  /* ★ 关键：APP 收到握手会立刻复位，Chrome 必然收到 gattserverdisconnected。
-   * 先等这个事件（最多 9 s，超时就主动断开），再重连；
-   * 原来固定 sleep(2600) 后直接 gatt()，会复用 connected=true 的死会话，
-   * 每轮都报 "GATT operation failed for unknown reason."。 */
-  const why = await waitGattDisconnect(5000);
-  if(why==="timeout"){ try{ device.gatt.disconnect(); }catch(_){} }
-  log(`链路已释放(${why})，等待设备 Boot 广播…`,"dim");
-  await sleep(1200);
+  /* ★ 交给设备：APP 收到握手会自行复位，链路由设备侧断开，
+   * 这里只"等" gattserverdisconnected 事件，不主动 disconnect。 */
+  const why = await waitGattDisconnect(12000);
+  log(`设备侧断开(${why})，等待 Boot 广播后重连…`,"dim");
+
   for(let i=1;i<=30;i++){
     try{
       if(i>1) await sleep(400);
       const __t=performance.now();
-      await gatt(1500);                       // 1.5 s 没连上就放弃，立刻下一轮
+      /* 还没断（例如握手没生效）：再补一枪握手，不要断链 */
+      if(device.gatt.connected && chW){
+        frames.length=0;
+        const r=await request(T.HS, devInfo(target), T.HSR, 1200);
+        if(r){
+          const v=[...r.slice(17,21)].map(b=>b.toString(16).padStart(2,"0")).join(".");
+          if(v.startsWith("ff.ff")){ switching=false; log(`已进入 Boot 模式（第 ${i} 次，${((performance.now()-__t)/1000).toFixed(1)} s）`,"ok"); return r; }
+        }
+        await sleep(600); continue;
+      }
+      await gatt(1500);
       await sleep(300);
       frames.length=0;
       const r=await request(T.HS, devInfo(target), T.HSR, 1200);
@@ -334,7 +336,7 @@ function enterBoot(){
         if(v.startsWith("ff.ff")){ switching=false; log(`已进入 Boot 模式（第 ${i} 次尝试，${((performance.now()-__t)/1000).toFixed(1)} s）`,"ok"); return r; }
         log(`    握手版本 ${v}，仍在 APP，继续等复位…`,"dim");
       }
-    }catch(e){ if(i%2===0||i<3) log(`    扫描中(${i})… ${e.message}`,"dim"); }
+    }catch(e){ if(i%2===0||i<3) log(`    等待重连(${i})… ${e.message}`,"dim"); }
     await sleep(600);
   }
   switching=false;
@@ -691,18 +693,20 @@ async function startUpgrade(){
   try{
     /* ★ 预检：清掉上一轮残留的握手缓存，重新握手看真实模式。
      * 设备在 Boot → 复用这次握手直接升级；在 APP → 交班流程接管。 */
+    /* ★ 预检只发一次握手，结果直接决定走哪条分支：
+     *   ff.ff.ff.ff → Boot：复用这次握手，直接进参数阶段；
+     *   其它        → APP：交给 enterBoot 交班（它自己等设备复位断开）。 */
     const pre = await freshHandshake();
-    if(pre && pre.r[0]!==0 && !pre.v.startsWith("ff.ff")){
-      throw new Error("握手被拒 0x"+pre.r[0].toString(16)+"（ Boot 只收『蓝牙板 S』，请检查目标选择）");
+    if(pre && pre.r[0]!==0){
+      throw new Error("握手被拒 0x"+pre.r[0].toString(16)+"（Boot 只收『蓝牙板 S』，请检查目标是不是蓝牙板 S）");
     }
-    // ★ 开始升级才让设备进 Boot：先只识别模式（不改设备状态），
-    //    APP 才发 53A2；已在 boot 则直接复用握手结果。
-    const curMode = await probeModeOnly(1500);
-    if(curMode === "app"){
+    if(pre && pre.v.startsWith("ff.ff")){
+      hsReady = {r: pre.r, t: Date.now()};      /* Boot：不再多发握手 */
+    }else{
       stage("切换 Boot");
-      log("当前在 APP，发送进 Boot 命令…","st");
+      log("当前在 APP（预检握手已下发），等待设备自己复位…","st");
       const bootR = await enterBoot();
-      if(!bootR) throw new Error("自动进 Boot 失败");
+      if(!bootR) throw new Error("自动交班进 Boot 失败");
       setBadge("boot");
       hsReady = {r: bootR, t: Date.now()};
     }
@@ -727,7 +731,7 @@ async function startUpgrade(){
         r = await request(T.HS, devInfo(target), T.HSR, 4000);
       }catch(e){
         log("握手写入失败（"+e.message+"），重连后重试","dim");
-        await gatt(); hsReady=null;
+        await gatt(4000, true); hsReady=null;
         r = await request(T.HS, devInfo(target), T.HSR, 4000);
       }
       if(!r){
