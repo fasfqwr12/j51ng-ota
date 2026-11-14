@@ -275,26 +275,34 @@ let __bootLock=null;
 function enterBoot(){
   if(__bootLock) return __bootLock;
   __bootLock=(async()=>{
-  log("发送进 Boot 命令 …","dim");
-  const w=async()=>{ if(chW.writeValueWithoutResponse) await chW.writeValueWithoutResponse(APP_ENTER_BOOT); else await chW.writeValue(APP_ENTER_BOOT); };
+  log("交班进 Boot：发握手，APP 收到即复位（新固件无 53A2）","dim");
   let sent=false;
   for(let k=1;k<=4 && !sent;k++){
     try{
       // 设备重启后旧特征会失效，先确保链路和特征都是新的
       if(k>1 || !(device && device.gatt.connected) || !chW) await gatt();
-      await w(); sent=true;
+      frames.length=0;
+      await send(T.HS, devInfo(target));
+      /* 已在 Boot：握手直接回 ff.ff.ff.ff，不用等断链 */
+      const rNow = await waitFrame(T.HSR, 1200);
+      if(rNow){
+        const v=[...rNow.slice(17,21)].map(b=>b.toString(16).padStart(2,"0")).join(".");
+        if(v.startsWith("ff.ff")){ log("设备已在 Boot，直接升级","ok"); return rNow; }
+        log(`当前在 APP（版本 ${v}），已触发交班复位…`,"dim");
+      }
+      sent=true;
     }catch(e){
-      log(`进 Boot 命令写入失败(${k})：${e.message}`,"dim");
-      await sleep(1500);
+      log(`交班握手写入失败(${k})：${e.message}`,"dim");
+      await sleep(1200);
     }
   }
-  if(!sent){ log("进 Boot 命令发送失败","err"); return null; }
+  if(!sent){ log("交班握手发送失败","err"); return null; }
   switching=true;
-  /* ★ 关键：设备收到 53A2 会复位，Chrome 必然收到 gattserverdisconnected。
-   * 先等这个事件（最多 4 s，超时就主动断开），再重连；
+  /* ★ 关键：APP 收到握手会立刻复位，Chrome 必然收到 gattserverdisconnected。
+   * 先等这个事件（最多 9 s，超时就主动断开），再重连；
    * 原来固定 sleep(2600) 后直接 gatt()，会复用 connected=true 的死会话，
    * 每轮都报 "GATT operation failed for unknown reason."。 */
-  const why = await waitGattDisconnect(4000);
+  const why = await waitGattDisconnect(9000);
   if(why==="timeout"){ try{ device.gatt.disconnect(); }catch(_){} }
   log(`链路已释放(${why})，等待设备 Boot 广播…`,"dim");
   await sleep(1200);
@@ -306,7 +314,11 @@ function enterBoot(){
       await sleep(300);
       frames.length=0;
       const r=await request(T.HS, devInfo(target), T.HSR, 1200);
-      if(r){ switching=false; log(`已进入 Boot 模式（第 ${i} 次尝试，${((performance.now()-__t)/1000).toFixed(1)} s）`,"ok"); return r; }
+      if(r){
+        const v=[...r.slice(17,21)].map(b=>b.toString(16).padStart(2,"0")).join(".");
+        if(v.startsWith("ff.ff")){ switching=false; log(`已进入 Boot 模式（第 ${i} 次尝试，${((performance.now()-__t)/1000).toFixed(1)} s）`,"ok"); return r; }
+        log(`    握手版本 ${v}，仍在 APP，继续等复位…`,"dim");
+      }
     }catch(e){ if(i%2===0||i<3) log(`    扫描中(${i})… ${e.message}`,"dim"); }
     await sleep(600);
   }
@@ -321,6 +333,17 @@ async function probeMode(){
   frames.length=0;
   let r = await request(T.HS, devInfo(target), T.HSR, 2000);
   if(r){
+    /* 新固件 APP 也回握手：按版本区分，ff.ff.ff.ff 才是 Boot */
+    const v0 = r.length>=21 ? [...r.slice(17,21)].map(b=>b.toString(16).padStart(2,"0")).join(".") : "";
+    if(!v0.startsWith("ff.ff")){
+      setBadge("app");
+      $("kHw").textContent = new TextDecoder().decode(r.slice(1,17)).replace(/[\uFFFD\x00]/g,"") || "—";
+      $("kVer").textContent = v0 || "—";
+      $("hMeta").textContent = "APP 模式 · 点「开始升级」将自动交班进入 Boot";
+      log(`模式：APP（版本 ${v0}），开始升级时自动交班`,"dim");
+      hsReady = null;
+      return "app";
+    }
     setBadge("boot");
     const hw=new TextDecoder().decode(r.slice(1,17)).replace(/[\uFFFD\x00]/g,"");
     $("kHw").textContent = hw || "—";
@@ -579,7 +602,10 @@ async function useLibItem(it, btn){
 async function probeModeOnly(timeout=2000){
   frames.length=0;
   const r = await request(T.HS, devInfo(target), T.HSR, timeout);
-  return r ? "boot" : "app";
+  if(!r) return "app";
+  /* 新固件 APP 也会应答 0x0102，只能按版本判：ff.ff.ff.ff = Boot */
+  const v = r.length>=21 ? [...r.slice(17,21)].map(b=>b.toString(16).padStart(2,"0")).join(".") : "";
+  return v.startsWith("ff.ff") ? "boot" : "app";
 }
 /* 设备复位后自动重连：每 1.2 s 试一次，直到回来或超时 */
 async function waitReconnect(maxMs=30000, waitDiscMs=12000){
