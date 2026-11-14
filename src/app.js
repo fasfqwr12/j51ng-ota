@@ -608,7 +608,7 @@ async function probeModeOnly(timeout=2000){
   return v.startsWith("ff.ff") ? "boot" : "app";
 }
 /* 设备复位后自动重连：每 1.2 s 试一次，直到回来或超时 */
-async function waitReconnect(maxMs=30000, waitDiscMs=12000){
+async function waitReconnect(maxMs=30000, waitDiscMs=12000, trustApp=false){
   const t0=performance.now();
 
   /* ★ 阶段1：先等"真实断链"。
@@ -621,25 +621,25 @@ async function waitReconnect(maxMs=30000, waitDiscMs=12000){
     else                log(`    ${Math.round(waitDiscMs/1000)} s 内未见断链事件，继续尝试重连`,"dim");
   }
 
-  /* ★ 阶段2：重连 + 稳定性确认。
-   * 只连上不算数：必须连续两次(间隔 800ms)给出同样的模式，
-   * 避免把复位瞬间的"握手无应答"误判成 APP。 */
+  /* ★ 阶段2：重连。
+   * trustApp=true（0x0502 已确认接管）：只确认"能连上"，绝不再发 0x0101 ——
+   * 新固件 APP 收到握手就会交班复位，会把刚升好的 APP 又踢回 Boot（17:04 那次）。
+   * trustApp=false（0x0502 丢失）：才用握手判一次模式。 */
   let n=0;
   while(performance.now()-t0<maxMs){
     n++;
     try{
       await gatt(1500);
-      const m1 = await probeModeOnly(900);
-      await sleep(800);
-      const m2 = await probeModeOnly(900);
       const secs=((performance.now()-t0)/1000).toFixed(1);
-      if(m1===m2){
-        log(`    重连成功（第 ${n} 次，${secs} s）· 连续两次判定 ${m1==="app"?"APP":"Boot"}`,"ok");
-        setBadge(m1);
-        return m1;
+      if(trustApp){
+        log(`    重连成功（第 ${n} 次，${secs} s）`,"ok");
+        setBadge("app");
+        return "app";
       }
-      log(`    第 ${n} 次判定不一致(${m1}/${m2})，设备仍在切换，再等…`,"dim");
-      await sleep(600);
+      const m1 = await probeModeOnly(900);
+      log(`    重连成功（第 ${n} 次，${secs} s）· 判定 ${m1==="app"?"APP":"Boot"}`,"ok");
+      setBadge(m1);
+      return m1;
     }catch(e){
       if(n%5===0) log(`    等待设备重启…（${Math.round((performance.now()-t0)/1000)} s）`,"dim");
       await sleep(800);
@@ -831,7 +831,7 @@ async function startUpgrade(){
 
     stage("等待设备重启");
     log("[6] 设备复位中，等待重新连接…","dim");
-    const mode = await waitReconnect(30000);
+    const mode = await waitReconnect(30000, 12000, true);
     if(mode==="app"){
       log("[7] ✅ 升级成功：设备已重启并运行新 APP","st");
       chip("升级成功","on");
@@ -851,8 +851,8 @@ async function startUpgrade(){
       log("    回读设备镜像头，确认运行版本…","dim");
       const dev = await readDeviceMeta(3000);
       if(!dev){
-        log("[7] ⚠ 版本未确认：设备未回应镜像头请求（0xFE）","err");
-        chip("版本未确认","");
+        /* 新固件不再支持 53A2/0xFE 镜像头回读：跳过即可，0x0502=0x00 已确认接管 */
+        log("[7] 设备不支持镜像头回读（新固件无 0xFE），跳过版本核对","dim");
       }else if(dev.none){
         log("[7] ⚠ 版本未确认：设备回报没有 J5AA 头（旧镜像）","err");
         chip("版本未确认","");
