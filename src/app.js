@@ -104,6 +104,8 @@ function withTimeout(p, ms, what){
 }
 
 let __gattLock=null;
+let __userDisc=false;      /* 用户手动点「断开」：禁止任何自动重连 */
+let __devDisc=false;       /* 升级中设备自己断开（交班/复位），需要扫描等它回来 */
 /* force=true 才主动断旧会话；默认复用健康连接。
  * 之前每次调用都 disconnect→connect，升级一开始就连断两次，
  * 设备侧广播来不及恢复，直接导致 "Connection attempt failed"。 */
@@ -176,13 +178,20 @@ function waitGattDisconnect(ms){
 function onDisconnect(){
   /* 链路没了：把会话对象全部作废，下次 gatt() 才会真正重连 */
   server=null; chW=null; chN=null;
-  /* ★ 不论是否在 switching，都要唤醒「等断开」的一方，
-   * 否则进 Boot 后的重连会一直等到超时。 */
+  /* ★ 不论是否在 switching，都要唤醒「等断开」的一方 */
   for(const f of __discWaiters.slice()) f("event");
-  if(switching){ chip("切换中…","work"); return; }
-  if(running){
-    /* 升级中：设备复位/交班导致的正常断开，不是意外掉线 */
-    log("蓝牙连接断开（设备复位中…）","dim");
+  /* 用户手动断的：不接管、不自动重连 */
+  if(__userDisc){
+    chip("已断开",""); setBadge(null);
+    $("hMeta").textContent="连接已断开";
+    log("蓝牙连接断开（手动）","dim");
+    return;
+  }
+  /* 升级中设备自己断（交班复位 / 升级完成复位）：标记，由流程扫描等它回来 */
+  if(running || switching){
+    __devDisc=true;
+    log("升级中设备自己断开（交班/复位），开始扫描等待重连（上限 20 s）…","dim");
+    if(switching){ chip("切换中…","work"); }
     return;
   }
   chip("已断开",""); setBadge(null);
@@ -317,6 +326,7 @@ function enterBoot(){
    * 连上就握手确认 ff.ff.ff.ff；总时长上限 20 s。 */
   const t0=performance.now();
   while(performance.now()-t0 < 20000){
+    if(__userDisc){ switching=false; log("已手动断开，停止自动重连","dim"); return null; }
     try{
       if(!(device && device.gatt && device.gatt.connected)) await gatt(2500, true);
       frames.length=0;
@@ -648,6 +658,7 @@ async function waitReconnect(maxMs=20000, waitDiscMs=12000, trustApp=false){
   let n=0;
   while(performance.now()-t0<maxMs){
     n++;
+    if(__userDisc){ log("已手动断开，停止自动重连","dim"); return null; }
     try{
       await gatt(2500, true);
       const secs=((performance.now()-t0)/1000).toFixed(1);
@@ -670,7 +681,7 @@ async function waitReconnect(maxMs=20000, waitDiscMs=12000, trustApp=false){
 
 async function startUpgrade(){
   if(!fw || running) return;
-  running=true; abort=false; refreshGo();
+  running=true; abort=false; __userDisc=false; __devDisc=false; refreshGo();
   $("btnStop").disabled=false;
   $("log").innerHTML="";
   const t0=performance.now();
@@ -928,7 +939,12 @@ async function freshHandshake(){
 
 /* ---------------- 事件 ---------------- */
 $("btnConn").onclick=connect;
-$("btnDisc").onclick=()=>{ try{ device.gatt.disconnect(); }catch(_){} };
+$("btnDisc").onclick=()=>{
+  /* 用户手动断开：置标志，任何"升级中自动重连"都不许接管 */
+  __userDisc=true;
+  log("已手动断开（本次不会自动重连）","dim");
+  try{ device.gatt.disconnect(); }catch(_){}
+};
 $("btnProbe").onclick=async()=>{ await probeMode(); refreshGo(); };
 $("btnGo").onclick=startUpgrade;
 $("btnStop").onclick=()=>{ abort=true; log("已请求中止…","dim"); };
