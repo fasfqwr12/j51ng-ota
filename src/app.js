@@ -678,6 +678,12 @@ async function startUpgrade(){
   window.__perf={wr:[],rounds:[]};
   log(`目标 ${target} · 镜像 ${img.length} B · win=${TUNE.win} gap=${TUNE.gap}`);
   try{
+    /* ★ 预检：清掉上一轮残留的握手缓存，重新握手看真实模式。
+     * 设备在 Boot → 复用这次握手直接升级；在 APP → 交班流程接管。 */
+    const pre = await freshHandshake();
+    if(pre && pre.r[0]!==0 && !pre.v.startsWith("ff.ff")){
+      throw new Error("握手被拒 0x"+pre.r[0].toString(16)+"（ Boot 只收『蓝牙板 S』，请检查目标选择）");
+    }
     // ★ 开始升级才让设备进 Boot：先只识别模式（不改设备状态），
     //    APP 才发 53A2；已在 boot 则直接复用握手结果。
     const curMode = await probeModeOnly(1500);
@@ -895,6 +901,20 @@ async function startUpgrade(){
   }finally{
     running=false; $("btnStop").disabled=true; hsReady=null; refreshGo();
   }
+}
+
+/* 开始升级前先跑一次干净的模式识别：重连拿新会话 + 重新握手 + 打印版本。
+ * 避免上次升级残留的 hsReady（可能是 0xE1 那次目标错的应答）污染这一轮。 */
+async function freshHandshake(){
+  try{ await gatt(4000); }catch(e){ log("重连失败："+e.message,"dim"); }
+  hsReady=null;
+  frames.length=0;
+  const r = await request(T.HS, devInfo(target), T.HSR, 2000);
+  if(!r) return null;
+  const v=[...r.slice(17,21)].map(b=>b.toString(16).padStart(2,"0")).join(".");
+  log(`预检握手 → ${v.startsWith("ff.ff")?"Boot":"APP"}（${v}）状态=0x${r[0].toString(16)}`,"dim");
+  if(r[0]===0 && v.startsWith("ff.ff")) hsReady={r, t: Date.now()};
+  return {r, v};
 }
 
 /* ---------------- 事件 ---------------- */
