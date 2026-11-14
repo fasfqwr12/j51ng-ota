@@ -1,6 +1,30 @@
 {
-  "updated": 1794462558,
+  "updated": 1794619642,
   "items": [
+    {
+      "file": "M_9501-000-02166_20261114.hex",
+      "role": "app",
+      "target": "M",
+      "targetName": "主控 M",
+      "title": "M_9501-000-02166_20261114（97,544B 去重版）",
+      "size": 97544,
+      "fileSize": 274417,
+      "sha256": "36c92f25b746128b63f2648f6430b13993261a6195d4afc476aefc2d44776024",
+      "version": "v20261114",
+      "mtime": 1794615000
+    },
+    {
+      "file": "S_app_20261114.bin",
+      "role": "app",
+      "target": "S",
+      "targetName": "蓝牙板 S",
+      "title": "S_app_20261114（73,440B 新布局）",
+      "size": 73440,
+      "fileSize": 73440,
+      "sha256": "8d959af4925a0cdf58786b3f7d29a9746554e0b2786a136f4f29b7746a33459b",
+      "version": "v20261114",
+      "mtime": 1794615000
+    },
     {
       "file": "M_9501-000-02166_v1.hex",
       "role": "app",
