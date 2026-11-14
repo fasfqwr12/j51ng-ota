@@ -216,7 +216,12 @@ function appendDevLog(c){
 function flushDevLog(){
   const t = __devLog.trim();
   __devLog = "";
-  if(t) log("[设备] " + t, "dim");
+  if(!t || t.length < 4) return;
+  /* 只放行"像日志"的行：二进制帧残留会把 0x54/0xFF 当字符刷屏
+   * （"TTTT…3J5AA#…" 就是），这里过滤掉。 */
+  if(!/[ \[\]:]/.test(t)) return;
+  if(/(.)\1{4,}/.test(t)) return;
+  log("[设备] " + t, "dim");
 }
 
 function hex2(p, n){ return [...p.slice(0, n)].map(b=>b.toString(16).padStart(2,'0').toUpperCase()).join(' '); }
