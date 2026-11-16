@@ -1,4 +1,6 @@
 /* J51NG OTA · Web Bluetooth 升级上位机 */
+import {createParser, MAX_FRAME} from "./rx_parse.mjs";
+
 const SVC   = "00002760-08c2-11e1-9073-0e8ac72e1001";
 const CH_W  = "00002760-08c2-11e1-9073-0e8ac72e0001";
 const CH_N  = "00002760-08c2-11e1-9073-0e8ac72e0002";
@@ -50,9 +52,13 @@ const rd16 = (b,o) => (b[o]<<8)|b[o+1];
 
 /* ---------------- 日志 / UI ---------------- */
 function log(msg, cls=""){
-  const el=$("log"), t=new Date().toTimeString().slice(0,8);
-  el.insertAdjacentHTML("beforeend", `<div class="${cls}">${t}  ${msg}</div>`);
-  el.scrollTop = el.scrollHeight;
+  const box=$("log"), t=new Date().toTimeString().slice(0,8);
+  /* 设备回传的字节可能是任意二进制：一律走 textContent，不拼 HTML */
+  const d=document.createElement("div");
+  if(cls) d.className=cls;
+  d.textContent = t + "  " + msg;
+  box.appendChild(d);
+  box.scrollTop = box.scrollHeight;
 }
 function chip(txt, cls){
   $("chipTxt").textContent=txt;
@@ -70,6 +76,7 @@ function setBadge(mode){
 /* ---------------- BLE ---------------- */
 async function connect(){
   try{
+    __userDisc=false; __cancelled=false;
     chip("请求中…","work");
     device = await navigator.bluetooth.requestDevice({
       filters:[{namePrefix:"AIMTECH"},{namePrefix:"J51NG"}],
@@ -95,71 +102,109 @@ async function connect(){
 }
 
 /* 连接超时包装：Chrome 的 gatt.connect() 在设备没广播时会挂几十秒，
-   这里给它一个短超时，超时就当"这次没扫到"，马上重试。 */
-function withTimeout(p, ms, what){
-  return Promise.race([
-    p,
-    new Promise((_, rej)=>setTimeout(()=>rej(new Error((what||"操作")+"超时")), ms))
-  ]);
+   这里给它一个短超时，超时就当"这次没扫到"，马上重试。
+   ★ 超时只结束等待不会取消底层连接，所以 onTimeout 里要显式断链，
+     否则晚到的成功连接会在后台占住设备、让它不再广播。 */
+function withTimeout(p, ms, what, onTimeout){
+  return new Promise((resolve, reject)=>{
+    let done = false;
+    const tm = setTimeout(()=>{
+      if(done) return;
+      done = true;
+      try{ onTimeout && onTimeout(); }catch(_){}
+      reject(new Error((what||"操作")+"超时"));
+    }, ms);
+    p.then(v=>{ if(done) return; done=true; clearTimeout(tm); resolve(v); },
+           e=>{ if(done) return; done=true; clearTimeout(tm); reject(e); });
+  });
 }
 
 let __gattLock=null;
 let __userDisc=false;      /* 用户手动点「断开」：禁止任何自动重连 */
 let __devDisc=false;       /* 升级中设备自己断开（交班/复位），需要扫描等它回来 */
+let __session=0;           /* 连接代次：断链/新会话递增，旧异步结果一律作废 */
+let __cancelled=false;     /* 手动断开：取消所有在途流程 */
+let __teardownPending=0;   /* 主动断链计数：这类断开事件不该判成"会话已切换" */
+let __rxParser=createParser();
+let __rxErr={len:0, crc:0, sum:0};
+/* 主动断开旧会话（换链路/换设备时用）。产生的 gattserverdisconnected
+ * 是预期内事件，不能据此作废正在进行的新连接。 */
+function teardownLink(){
+  if(device && device.gatt && device.gatt.connected){
+    __teardownPending++;
+    try{ device.gatt.disconnect(); }
+    catch(_){ __teardownPending--; }
+  }
+}
 /* force=true 才主动断旧会话；默认复用健康连接。
  * 之前每次调用都 disconnect→connect，升级一开始就连断两次，
  * 设备侧广播来不及恢复，直接导致 "Connection attempt failed"。 */
 function gatt(timeoutMs, force){
   if(__gattLock) return __gattLock;
   __gattLock=(async()=>{
+  if(__cancelled) throw new Error("已取消");
   if(device.gatt.connected && !force && server && chW && chN){
     return;                     /* 会话还在、特征都在：直接用，不动链路 */
   }
   if(device.gatt.connected){
-    try{ device.gatt.disconnect(); }catch(_){}
+    teardownLink();             /* 预期内断开：不推进代次 */
     await sleep(200);
   }
-  server = await withTimeout(device.gatt.connect(), timeoutMs||8000, "连接");
-  let svc;
+  const gen=__session;          /* 代次在清场之后取，避免自己的断链把自己判失效 */
+  const attempt = device.gatt.connect();
+  let srv;
   try{
-    svc = await server.getPrimaryService(SVC);
+    srv = await withTimeout(attempt, timeoutMs||8000, "连接", ()=>{
+      try{ device.gatt.disconnect(); }catch(_){}
+    });
   }catch(e){
-    try{ device.gatt.disconnect(); }catch(_){}
-    chW=null; chN=null; server=null;
+    /* 晚到的成功必须立刻释放，否则设备被一条"没人用"的链路占住不再广播 */
+    attempt.then(
+      ()=>{ try{ device.gatt.disconnect(); }catch(_){} },
+      ()=>{}
+    );
     throw e;
   }
-  chW = await svc.getCharacteristic(CH_W);
-  chN = await svc.getCharacteristic(CH_N);
-  await chN.startNotifications();
+  if(gen!==__session || __cancelled){
+    try{ device.gatt.disconnect(); }catch(_){}
+    throw new Error("连接已失效（会话已切换）");
+  }
+  let svc;
+  try{
+    svc = await srv.getPrimaryService(SVC);
+    chW = await svc.getCharacteristic(CH_W);
+    chN = await svc.getCharacteristic(CH_N);
+    await chN.startNotifications();
+  }catch(e){
+    try{ device.gatt.disconnect(); }catch(_){}
+    chW=null; chN=null;
+    throw e;
+  }
+  server = srv;
+  /* 新会话：丢掉上一条连接残留的半帧与旧应答 */
+  __rxParser.reset();
+  frames.length=0;
+  __metaQ.length=0;
   /* 重连会拿到新的 characteristic 对象；用标记避免同一对象重复绑定 */
   if(!chN.__j51ngBound){
     chN.__j51ngBound = true;
     chN.addEventListener("characteristicvaluechanged", ev=>{
-    const dv=ev.target.value;
-    const a=new Uint8Array(dv.buffer,dv.byteOffset,dv.byteLength);
-    let i=0;
-    while(i+4<=a.length){
-      /* ★ APP 层应答 54 A1 | len(2,LE) | cmd | payload(len-3) | cs(2) */
-      if(a[i]===0x54 && a[i+1]===0xA1){
-        const flen = rd16(a,i+2);
-        if(i+4+flen<=a.length){
-          const cmd=a[i+4], pl=a.slice(i+5, i+5+(flen-3));
-          __metaQ.push({cmd, p:pl});
-          i += 4 + flen; continue;
+      const dv=ev.target.value;
+      const a=new Uint8Array(dv.buffer,dv.byteOffset,dv.byteLength);
+      /* ★ 统一交给流式解析器：拆包/并包/校验都在那里做，
+       *   这里不再按字节猜协议（曾把小端长度读成大端导致乱码日志）。 */
+      for(const f of __rxParser.push(a)){
+        if(f.kind==="eb90"){
+          if(f.type!==0x0302 && f.type!==0x0303 && f.type!==0x0301 && f.type!==0x0000) logRx(f.type, f.payload);
+          frames.push({t:f.type, p:f.payload});
+        }else if(f.kind==="app"){
+          __metaQ.push({cmd:f.cmd, p:f.payload});
+        }else if(f.kind==="junk"){
+          appendDevLog(f.byte);
+        }else if(f.kind==="error"){
+          __rxErr[f.code]=(__rxErr[f.code]||0)+1;
         }
       }
-      if(a[i]===0xEB && a[i+1]===0x90){
-        const len=rd16(a,i+4);
-        if(i+7+len<=a.length){
-          const __t = rd16(a,i+2); const __p = a.slice(i+6,i+6+len);
-          if(__t!==0x0302 && __t!==0x0303 && __t!==0x0301 && __t!==0x0000) logRx(__t, __p);
-          frames.push({t:__t, p:__p});
-          i+=7+len; continue;
-        }
-      }
-      appendDevLog(a[i]);
-      i++;
-    }
     });
   }
   })().finally(()=>{ __gattLock=null; });
@@ -176,8 +221,11 @@ function waitGattDisconnect(ms){
   });
 }
 function onDisconnect(){
-  /* 链路没了：把会话对象全部作废，下次 gatt() 才会真正重连 */
+  /* 链路没了：作废会话对象。自己主动断的不推进代次，否则会误伤新连接。 */
+  if(__teardownPending > 0) __teardownPending--;
+  else __session++;
   server=null; chW=null; chN=null;
+  __rxParser.reset();
   /* ★ 不论是否在 switching，都要唤醒「等断开」的一方 */
   for(const f of __discWaiters.slice()) f("event");
   /* 用户手动断的：不接管、不自动重连 */
@@ -331,7 +379,7 @@ function enterBoot(){
    * 连上就握手确认 ff.ff.ff.ff；总时长上限 20 s。 */
   const t0=performance.now();
   while(performance.now()-t0 < 20000){
-    if(__userDisc){ switching=false; log("已手动断开，停止自动重连","dim"); return null; }
+    if(__userDisc || __cancelled){ switching=false; log("已手动断开，停止自动重连","dim"); return null; }
     try{
       if(!(device && device.gatt && device.gatt.connected)) await gatt(2500, true);
       frames.length=0;
@@ -663,7 +711,7 @@ async function waitReconnect(maxMs=20000, waitDiscMs=12000, trustApp=false){
   let n=0;
   while(performance.now()-t0<maxMs){
     n++;
-    if(__userDisc){ log("已手动断开，停止自动重连","dim"); return null; }
+    if(__userDisc || __cancelled){ log("已手动断开，停止自动重连","dim"); return null; }
     try{
       await gatt(2500, true);
       const secs=((performance.now()-t0)/1000).toFixed(1);
@@ -686,7 +734,7 @@ async function waitReconnect(maxMs=20000, waitDiscMs=12000, trustApp=false){
 
 async function startUpgrade(){
   if(!fw || running) return;
-  running=true; abort=false; __userDisc=false; __devDisc=false; refreshGo();
+  running=true; abort=false; __userDisc=false; __devDisc=false; __cancelled=false; refreshGo();
   $("btnStop").disabled=false;
   $("log").innerHTML="";
   const t0=performance.now();
@@ -945,8 +993,10 @@ async function freshHandshake(){
 /* ---------------- 事件 ---------------- */
 $("btnConn").onclick=connect;
 $("btnDisc").onclick=()=>{
-  /* 用户手动断开：置标志，任何"升级中自动重连"都不许接管 */
-  __userDisc=true;
+  /* 用户手动断开：置标志，任何"升级中自动重连"都不许接管。
+   * 同时作废会话代次并取消在途流程，防止超时后晚到的连接/AI 定时器再连回来。 */
+  __userDisc=true; __cancelled=true; __session++;
+  frames.length=0; __metaQ.length=0; __rxParser.reset();
   log("已手动断开（本次不会自动重连）","dim");
   try{ device.gatt.disconnect(); }catch(_){}
 };
@@ -1158,5 +1208,23 @@ window.ota = {
       ackAvg: rd.length?+(rd.reduce((a,b)=>a+b.dt,0)/rd.length).toFixed(0):null };
   },
   start: ()=>startUpgrade(),
-  stop: ()=>{ abort=true; }
+  stop: ()=>{ abort=true; },
+  /* 自检钩子：供离线用例直接驱动连接生命周期（不参与正常流程） */
+  _internals:{
+    gatt, withTimeout,
+    state(){
+      return {
+        session:__session, cancelled:__cancelled, userDisc:__userDisc,
+        devDisc:__devDisc, hasServer:!!server, hasChW:!!chW, hasChN:!!chN,
+        rxPending:__rxParser.pending, rxErr:{...__rxErr},
+        frames:frames.length, meta:__metaQ.length
+      };
+    },
+    /* 与 connect() 一致：设置设备同时绑定断链监听，供离线用例复现真实路径 */
+    setDevice(d){
+      device=d;
+      d.addEventListener("gattserverdisconnected", onDisconnect);
+    },
+    reset(){ __cancelled=false; __userDisc=false; __devDisc=false; server=null; chW=null; chN=null; }
+  }
 };
