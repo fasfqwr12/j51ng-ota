@@ -105,7 +105,10 @@ def step_ota(target, fw):
         cwd=str(ART), env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
     t0 = time.time()
     for raw in p.stdout:
-        line = raw.decode("gb18030", errors="replace").rstrip()
+        try:
+            line = raw.decode("utf-8").rstrip()      # ota_ble_s.py 输出 UTF-8
+        except UnicodeDecodeError:
+            line = raw.decode("gb18030", errors="replace").rstrip()
         if line:
             log("[2/4] " + line)
         if time.time() - t0 > 300:
