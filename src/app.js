@@ -750,6 +750,8 @@ async function useLibItem(it, btn){
     if(segBtn) segBtn.click();
     const __d=new Date((it.mtime||0)*1000), __p2=n=>String(n).padStart(2,"0");
     const __ts=it.mtime?`${__d.getFullYear()}-${__p2(__d.getMonth()+1)}-${__p2(__d.getDate())} ${__p2(__d.getHours())}:${__p2(__d.getMinutes())}`:"—";
+    globalThis.__libPick = { target: it.target, file: it.file, title: it.title };
+    const ab=$("btnApiGo"); if(ab) ab.disabled=false;
     log(`已选用 ${it.title}（${it.targetName}）· ${it.size} B · 生成于 ${__ts}`,"ok");
   }catch(e){
     log("下载失败："+e.message,"err");
@@ -1102,6 +1104,41 @@ $("btnGo").onclick=startUpgrade;
 $("btnStop").onclick=()=>{ abort=true; log("已请求中止…","dim"); };
 $("btnClr").onclick=()=>{ $("log").innerHTML=""; };
 $("btnLib").onclick=loadLibrary;
+/* ---------------- 服务端升级（API 路径，原生 BLE，速度约为网页直连的 1.5 倍） ---------------- */
+async function apiUpgrade(){
+  const pick = globalThis.__libPick;
+  if(!pick){ log("先在「在线固件库」点选用，再走服务端升级","err"); return; }
+  const btn=$("btnApiGo"), stop=$("btnStop");
+  log(`[API] 目标 ${pick.target} · ${pick.title} —— 交给服务端客户端（不占用本页蓝牙）`,"st");
+  btn.disabled=true; stop.disabled=false;
+  try{
+    const r=await fetch(`/api/ota?target=${encodeURIComponent(pick.target)}&file=${encodeURIComponent("firmware/"+pick.file)}`,{method:"POST"});
+    const j=await r.json();
+    if(!j.ok) throw new Error(j.err||("HTTP "+r.status));
+    let since=0, lastStage="";
+    for(;;){
+      const st=await (await fetch("/api/status",{cache:"no-store"})).json();
+      const lg=await (await fetch("/api/log?since="+since,{cache:"no-store"})).json();
+      if(lg.lines&&lg.lines.length){
+        for(const line of lg.lines){ log("[API] "+line); }
+        since=lg.total;
+      }
+      if(st.stage!==lastStage){ lastStage=st.stage; $("tailStage").textContent=st.stage; }
+      if(!st.running){
+        log(`[API] 结束：${st.stage}（${st.elapsed}s）`, st.ok?"ok":"err");
+        break;
+      }
+      await sleep(700);
+    }
+  }catch(e){
+    log("[API] 失败："+e.message,"err");
+  }finally{
+    btn.disabled=false; stop.disabled=true;
+  }
+}
+const __apiBtn=document.getElementById("btnApiGo");
+if(__apiBtn) __apiBtn.onclick=apiUpgrade;
+
 loadLibrary();
 $("drop").onclick=()=>$("file").click();
 $("file").onchange=e=>{ const f=e.target.files[0]; if(f) loadFile(f); };

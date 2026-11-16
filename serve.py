@@ -218,6 +218,10 @@ class Handler(SimpleHTTPRequestHandler):
                 return self._json({"ok": False, "err": "已有任务在跑"}, 409)
             target = q.get("target", ["S"])[0]
             fw = q.get("file", [str(WEB / "firmware" / "S_app_latest.bin")])[0]
+            _p = Path(fw)
+            if not _p.is_absolute():          # 允许页面直接传 firmware/xxx.hex
+                _p = (WEB / fw).resolve()
+            fw = str(_p)
             with _lock:
                 _lines.clear()
             _state.update(running=True, stage="启动", ok=None, t0=time.time())
