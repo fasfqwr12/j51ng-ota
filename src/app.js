@@ -644,6 +644,11 @@ function validateLocalImage(img, target){
   if(target !== "S") return null;                 /* M/R 镜像无 J5AA 头 */
   const j = parseJ5AA(img);
   if(!j) throw new Error("镜像缺少 J5AA 头（需 48B @0x200）：请确认选的是 APP 镜像而不是裸 bin/旧版 hex");
+  /* Keil 原始输出（Objects/sapp.hex）里 J5AA 头是占位块：size/crc/hcrc 全为 0，
+   * 真正可升级的镜像是后处理脚本 post_build_crc.py 生成的 S_app_latest.bin。 */
+  if(!j.hcrcOk && j.size === 0 && j.payloadCrc === 0 && j.hcrcStored === 0)
+    throw new Error("这是 Keil 原始输出（头部未填充：size/crc/hcrc 全为 0），不能直接升级；"
+      + "请改用 post_build_crc.py 生成的 firmware/S_app_latest.bin，或直接在下方「在线固件库」点 S_app_latest 的「选用」");
   if(!j.hcrcOk) throw new Error(`镜像头 CRC 不符（存 0x${h(j.hcrcStored)} / 算 0x${h(j.hcrcCalc)}），文件已损坏`);
   if(j.imageType !== 0) throw new Error("这不是 APP 镜像（image_type=" + j.imageType + "）");
   if(j.target !== 1) throw new Error("镜像目标不是 N32 蓝牙板");
