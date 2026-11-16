@@ -18,7 +18,10 @@ let frames=[], running=false, abort=false, target="M", fw=null;
 let hsReady=null;
 let switching=false;
 let writeChain=Promise.resolve();
-const TUNE = { win:32, gap:4 };
+/* 实测（2026-11-16，S 板 / Windows，连接间隔 7.5 ms 已确认）：
+   128 B/包 · gap=0 → 数据 4.96 s / 15.2 kB/s；gap=4 ms → 5.59 s / 13.5 kB/s。
+   228 B 档反而慢（20.6 ms/包，LL PDU 仍 27 B 被拆 9 片），不要用。 */
+const TUNE = { win:32, gap:0 };
 /* ★ 单包负载上限。S 板(N32WB031)在 228 B 分包时数据能传完、ACK 全正常，
  *   但设备端算出的 SHA 与主机不一致（0x0402=0x11）。
  *   实测只有 128 B 分包能通过校验（68720 B → 537 包）。
