@@ -1,4 +1,4 @@
-/* 服务端闭环日志面板：默认展开，常驻右上角。轮询 /api/log，纯 HTTP，不碰 BLE。 */
+/* 服务端闭环日志面板：默认收起，点右上角"显示 API 日志"展开。轮询 /api/log，纯 HTTP，不碰 BLE。 */
 (() => {
   if (window.__apiLiveLoaded) return;
   window.__apiLiveLoaded = true;
@@ -40,6 +40,8 @@
 
   box.appendChild(head); box.appendChild(body);
   document.body.appendChild(box);
+  /* 默认收起：面板会挡住右上角主要操作区，需要时再点"显示 API 日志"展开 */
+  box.style.display = "none";
 
   const tab = document.createElement("button");
   tab.textContent = "显示 API 日志";
@@ -49,6 +51,7 @@
     "padding:6px 12px","font:12px ui-monospace,Consolas,monospace","cursor:pointer"
   ].join(";");
   document.body.appendChild(tab);
+  tab.style.display = "block";   /* 面板收起时保留入口 */
 
   btnHide.onclick = () => { box.style.display = "none"; tab.style.display = "block"; };
   tab.onclick = () => { box.style.display = "flex"; tab.style.display = "none"; };
