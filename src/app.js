@@ -892,10 +892,14 @@ async function startUpgrade(){
     log(`[1b] 分包 pkt=${pkt} B × ${total}（设备 maxpkt=${devMax||"?"}）`,"dim");
     $("sPkt").textContent = `0/${total}`;
 
-    /* 容量闸门：设备自报的可用容量必须装得下 */
-    const capDev = st0 ? st0.capacity : 0;
+    /* 容量闸门：按"目标自己的"可用容量判，不能拿 S 的容量去卡 M/R。
+     * S 用设备自报（无暂存，镜像直接写 APP 区）；M 用 APP 区上限；
+     * R 不由本工具定义，交给雷达板自己在 0x0201 校验。 */
+    const CAP = { S: st0 ? st0.capacity : 0, M: 0x19800, R: 0 };
+    const capDev = CAP[target] || 0;
     if(capDev && img.length > capDev)
-      throw new Error(`镜像 ${img.length} B 超过设备可用容量 ${capDev} B，已停止（未发参数）`);
+      throw new Error(`镜像 ${img.length} B 超过 ${target} 可用容量 ${capDev} B，已停止（未发参数）`);
+    log(`[1c] 容量闸门：${img.length} B ≤ ${capDev ? capDev+" B" : "目标自校验"}（${target}）`,"dim");
 
     stage("擦除目标 APP 区");
     const sha=await sha256(img);
@@ -913,7 +917,7 @@ async function startUpgrade(){
     r = await request(T.PM, pm, T.PMR, 25000);
     if(!r) throw new Error("参数无应答");
     if(r[0]!==0) throw new Error("参数被拒 0x"+r[0].toString(16));
-    log("[2] 参数已接受，暂存区擦除完成","st");
+    log("[2] 参数已接受，目标 APP 区擦除完成","st");
 
     stage("传输数据");
     const td=performance.now();
