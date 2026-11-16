@@ -5,14 +5,16 @@ J51NG OTA 上位机 —— 带 API 的静态服务器（替换 python -m http.se
 页面完全不变，额外提供：
   GET  /api/status            当前任务状态
   GET  /api/log?since=N       增量日志
-  POST /api/ota?target=S&file=...   启动一轮完整闭环（进Boot -> OTA -> 复位 -> 回读）
+  POST /api/ota?target=S&file=...   启动一轮完整闭环
   POST /api/reset             清空日志
 
-闭环流程（全部在服务端跑，不需要浏览器点任何东西）：
-  1. ota_ble.BleHost 连接 -> 发 53 A2 0xFE 命令进 Boot
-  2. ota_ble_s.py --go 跑完整 OTA（握手/参数/数据/SHA/0x0501）
-  3. 等 20 s 让设备复位
-  4. pyocd 读 pc + TRACE[1]/TRACE[7] 判定最终落在 boot 还是 app
+闭环流程（普通任务全程只走 BLE，不碰 SWD）：
+  1. ota_ble_s.py 只用只读查询（0x0610）判断设备在 APP 还是 Boot
+  2. 目标 S 且设备在 APP：一次握手交班 -> 等复位 -> 重连确认 Boot -> 参数/数据/校验/完成
+  3. 目标 M/R：留在 S APP 透传，蓝牙板不复位
+  4. 结果判定只认设备自己的应答：S 复位后再只读比对运行镜像 size/payload_crc
+
+调试用的 step_verify() 仍保留（pyocd 读 pc），但普通 /api/ota 不再调用它。
 """
 import json, os, queue, subprocess, sys, threading, time, traceback
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
@@ -115,7 +117,7 @@ def step_ota(target, fw):
     return p.returncode == 0
 
 def step_verify(max_s=120):
-    """复位后轮询 SWD，直到 pc 落在 APP 或超时。返回 (zone, pc, 第几秒)"""
+    """【手动调试用，普通 /api/ota 不再调用】复位后轮询 SWD 看 pc 落点。"""
     def pycmd(*args):
         r = subprocess.run([sys.executable, "-m", "pyocd", "commander",
                             "-t", "n32wb031", "--pack", PACK, "-O", "connect_mode=attach",
@@ -148,41 +150,27 @@ def step_verify(max_s=120):
     return last or "未知", None, int(time.time() - t0)
 
 def job(target, fw):
+    """普通升级任务：全程只走 BLE。
+
+    这里刻意不做任何 SWD 动作（halt / 写 RAM / 复位 / 读 PC）：
+    那些是调试手段，不是产品流程；而且会与占用链路、掩盖真实结果。
+    结果判定只认客户端按目标给出的证据（S：复位后只读确认运行镜像）。
+    """
     _state["t0"] = time.time()
     try:
-        set_stage("进 Boot")
-        if not step_enter_boot(target):
-            log("[1/4] 进 Boot 失败，终止", "err"); set_stage("失败:进Boot", False); return
-        log("[1/4] 已请求进 Boot，等设备复位并重新广播…")
-        wait_advertising(25)
-
         set_stage("OTA")
+        log("[1/3] 交给客户端：交班/重连/结果确认都由 ota_ble_s.py 负责"
+            "（本进程不碰 SWD、不复位、不写 RAM）")
+
         ok = step_ota(target, fw)
         if not ok:
-            log("[2/4] OTA 未成功，强制复位进 Boot 后重试一次…", "err")
-            # 直接写 RAM 请求标志再复位，保证设备一定回到 Boot（不依赖 APP 是否还能连）
-            subprocess.run([sys.executable, "-m", "pyocd", "commander", "-t", "n32wb031",
-                            "--pack", PACK, "-O", "connect_mode=attach",
-                            "-c", "halt",
-                            "-c", "write32 0x2000BC00 0x00B1234B",
-                            "-c", "write32 0x2000BC04 0xFF4EDCB4",
-                            "-c", "go", "-c", "exit"], capture_output=True)
-            subprocess.run([sys.executable, "-m", "pyocd", "reset", "-t", "n32wb031",
-                            "--pack", PACK, "-O", "connect_mode=under-reset"],
-                           capture_output=True)
-            time.sleep(10)
-            ok = step_ota(target, fw)
-        if not ok:
-            log("[2/4] 重试后仍未成功", "err"); set_stage("失败:OTA", False); return
+            log("[2/3] OTA 未成功（失败原因见客户端日志）", "err")
+            set_stage("失败:OTA", False)
+            return
 
-        set_stage("验证")
-        zone, pc, secs = step_verify(120)
-        if zone == "APP":
-            log(f"[4/4] ✅ 闭环通过：设备已回到 APP（复位后 {secs} s）", "ok"); set_stage("通过", True)
-        elif zone == "BOOT":
-            log("[4/4] ❌ 设备停在 Boot（升级成功但没跳 APP）", "err"); set_stage("失败:停在Boot", False)
-        else:
-            log(f"[4/4] ⚠ 设备状态未知：{zone}", "err"); set_stage("未知", False)
+        set_stage("完成")
+        log("[3/3] ✅ 客户端已判定成功（S：复位后已只读确认运行镜像）", "ok")
+        set_stage("通过", True)
     except Exception:
         log("异常：\n" + traceback.format_exc(), "err"); set_stage("异常", False)
     finally:
