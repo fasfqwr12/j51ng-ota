@@ -56,7 +56,7 @@
   btnHide.onclick = () => { box.style.display = "none"; tab.style.display = "block"; };
   tab.onclick = () => { box.style.display = "flex"; tab.style.display = "none"; };
 
-  let since = 0, first = true, lastStage = "";
+  let since = 0, first = true, lastStage = "", jLastJob=null;
 
   function color(line) {
     if (line.includes("✅") || line.includes("通过")) return "#79e08c";
@@ -69,6 +69,7 @@
   async function poll() {
     try {
       const st = await (await fetch("/api/status", { cache: "no-store" })).json();
+      if (jLastJob !== st.job_id) { jLastJob=st.job_id; since=0; body.textContent=""; }
       const tag = st.running ? (st.stage + " …") : (st.ok === true ? "通过" : (st.ok === false ? st.stage : "空闲"));
       if (tag !== lastStage) {
         stage.textContent = tag;
@@ -81,6 +82,7 @@
         first = false;
       }
       const j = await (await fetch("/api/log?since=" + since, { cache: "no-store" })).json();
+      if(j.total < since) since=0;
       if (j.lines && j.lines.length) {
         for (const line of j.lines) {
           const d = document.createElement("div");

@@ -16,6 +16,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 let device=null, server=null, chW=null, chN=null;
 let frames=[], running=false, abort=false, target="M", fw=null;
 let hsReady=null;
+let apiAvailable=false, apiRunning=false, apiRemote=false, apiJobId=null;
 let switching=false;
 let writeChain=Promise.resolve();
 /* 实测（2026-11-16，S 板 / Windows，连接间隔 7.5 ms 已确认）：
@@ -89,7 +90,9 @@ function setBadge(mode){
 
 /* ---------------- BLE ---------------- */
 async function connect(){
+  if(running || apiRunning || apiRemote) return;
   try{
+    if(apiAvailable && (await apiRequest("/api/status")).running) throw new Error("服务端正在使用蓝牙");
     __userDisc=false; __cancelled=false;
     chip("请求中…","work");
     device = await navigator.bluetooth.requestDevice({
@@ -667,6 +670,7 @@ function validateLocalImage(img, target){
 const h = v => (v>>>0).toString(16).padStart(8,"0").toUpperCase();
 
 async function loadFile(f){
+  if(running || apiRunning || apiRemote) return;
   try{
     $("kFile").textContent=f.name;
     if(f.name.toLowerCase().endsWith(".hex")){
@@ -688,7 +692,16 @@ async function loadFile(f){
   }catch(e){ log("固件解析失败："+e.message,"err"); }
 }
 function refreshGo(){
-  $("btnGo").disabled = running || !fw || !(device && device.gatt.connected);
+  const busy=running || apiRunning || apiRemote;
+  $("btnGo").disabled = busy || !fw || !(device && device.gatt.connected);
+  $("btnApiGo").disabled = busy || !apiAvailable || !fw || !["M","S"].includes(target);
+  $("btnConn").disabled=busy;
+  $("btnProbe").disabled=busy || !(device && device.gatt.connected);
+  $("btnDisc").disabled=apiRunning || apiRemote || !(device && device.gatt.connected);
+  $("btnStop").disabled=!busy;
+  $("btnApiGo").title=apiAvailable ? "使用本机原生蓝牙升级当前固件" : "本地 API 不可用，请启动 serve.py";
+  for(const b of $("seg").children) b.disabled=busy;
+  $("file").disabled=busy;
 }
 
 
@@ -739,6 +752,7 @@ async function loadLibrary(){
   }
 }
 async function useLibItem(it, btn){
+  if(running || apiRunning || apiRemote) return;
   try{
     if(btn){ btn.disabled=true; btn.textContent="下载中"; }
     log(`在线库：下载 ${it.file} …`,"dim");
@@ -750,8 +764,7 @@ async function useLibItem(it, btn){
     if(segBtn) segBtn.click();
     const __d=new Date((it.mtime||0)*1000), __p2=n=>String(n).padStart(2,"0");
     const __ts=it.mtime?`${__d.getFullYear()}-${__p2(__d.getMonth()+1)}-${__p2(__d.getDate())} ${__p2(__d.getHours())}:${__p2(__d.getMinutes())}`:"—";
-    globalThis.__libPick = { target: it.target, file: it.file, title: it.title };
-    const ab=$("btnApiGo"); if(ab) ab.disabled=false;
+    refreshGo();
     log(`已选用 ${it.title}（${it.targetName}）· ${it.size} B · 生成于 ${__ts}`,"ok");
   }catch(e){
     log("下载失败："+e.message,"err");
@@ -812,7 +825,7 @@ async function waitReconnect(maxMs=20000, waitDiscMs=12000, trustApp=false){
 }
 
 async function startUpgrade(){
-  if(!fw || running) return;
+  if(!fw || running || apiRunning || apiRemote) return;
   running=true; abort=false; __userDisc=false; __devDisc=false; __cancelled=false; refreshGo();
   $("btnStop").disabled=false;
   $("log").innerHTML="";
@@ -1101,43 +1114,88 @@ $("btnDisc").onclick=()=>{
 };
 $("btnProbe").onclick=async()=>{ await probeMode(); refreshGo(); };
 $("btnGo").onclick=startUpgrade;
-$("btnStop").onclick=()=>{ abort=true; log("已请求中止…","dim"); };
+$("btnStop").onclick=stopUpgrade;
 $("btnClr").onclick=()=>{ $("log").innerHTML=""; };
 $("btnLib").onclick=loadLibrary;
-/* ---------------- 服务端升级（API 路径，原生 BLE，速度约为网页直连的 1.5 倍） ---------------- */
-async function apiUpgrade(){
-  const pick = globalThis.__libPick;
-  if(!pick){ log("先在「在线固件库」点选用，再走服务端升级","err"); return; }
-  const btn=$("btnApiGo"), stop=$("btnStop");
-  log(`[API] 目标 ${pick.target} · ${pick.title} —— 交给服务端客户端（不占用本页蓝牙）`,"st");
-  btn.disabled=true; stop.disabled=false;
-  try{
-    const r=await fetch(`/api/ota?target=${encodeURIComponent(pick.target)}&file=${encodeURIComponent("firmware/"+pick.file)}`,{method:"POST"});
-    const j=await r.json();
-    if(!j.ok) throw new Error(j.err||("HTTP "+r.status));
-    let since=0, lastStage="";
-    for(;;){
-      const st=await (await fetch("/api/status",{cache:"no-store"})).json();
-      const lg=await (await fetch("/api/log?since="+since,{cache:"no-store"})).json();
-      if(lg.lines&&lg.lines.length){
-        for(const line of lg.lines){ log("[API] "+line); }
-        since=lg.total;
-      }
-      if(st.stage!==lastStage){ lastStage=st.stage; $("tailStage").textContent=st.stage; }
-      if(!st.running){
-        log(`[API] 结束：${st.stage}（${st.elapsed}s）`, st.ok?"ok":"err");
-        break;
-      }
-      await sleep(700);
-    }
-  }catch(e){
-    log("[API] 失败："+e.message,"err");
-  }finally{
-    btn.disabled=false; stop.disabled=true;
-  }
+/* ---------------- 本机 API：共用当前固件、目标和任务状态 ---------------- */
+async function apiRequest(path, options={}){
+  const response=await fetch(path,{cache:"no-store",...options,signal:AbortSignal.timeout(10000)});
+  const data=await response.json();
+  if(!response.ok || (options.method && options.method!=="GET" && data.ok===false))
+    throw new Error(data.err || `HTTP ${response.status}`);
+  return data;
 }
-const __apiBtn=document.getElementById("btnApiGo");
-if(__apiBtn) __apiBtn.onclick=apiUpgrade;
+function showApiProgress(st){
+  stage(st.stage);
+  $("tAll").textContent=st.elapsed+" s";
+  const p=st.progress;
+  if(!p || !p.total) return;
+  const pct=Math.min(100,100*p.done/p.total);
+  $("sPct").textContent=pct.toFixed(1)+"%"; $("bar").style.width=pct+"%";
+  $("sPkt").textContent=`${p.done}/${p.total}`; $("sSpd").textContent=Math.round(p.speed).toLocaleString();
+  $("sRtx").textContent=p.retry; $("tData").textContent=p.elapsed.toFixed(1)+" s";
+}
+async function stopUpgrade(){
+  if(apiRunning || apiRemote){
+    try{
+      await apiRequest("/api/abort?job_id="+encodeURIComponent(apiJobId || ""),{method:"POST"});
+      log("[API] 已请求中止，等待蓝牙客户端退出…","dim");
+    }catch(e){ log("[API] 中止失败："+e.message,"err"); }
+    return;
+  }
+  abort=true; log("已请求中止…","dim");
+}
+async function apiUpgrade(){
+  if(!fw || running || apiRunning || apiRemote || !apiAvailable) return;
+  const image=fw.slice(), selectedTarget=target;
+  apiRunning=true; refreshGo();
+  try{
+    if(selectedTarget==="S") validateLocalImage(image, selectedTarget);
+    const state=await apiRequest("/api/status");
+    if(state.running) throw new Error("已有服务端任务在跑");
+    // Invalidate every pending browser connection before the native client starts.
+    __userDisc=true; __cancelled=true; __session++;
+    try{ device?.gatt?.disconnect(); }catch(_){}
+    server=null; chW=null; chN=null; hsReady=null;
+    await sleep(400);
+    $("sPct").textContent="0%"; $("bar").style.width="0%";
+    $("sPkt").textContent="0/0"; $("sSpd").textContent="0"; $("sRtx").textContent="0";
+    $("tConn").textContent="--"; $("tHs").textContent="--";
+    $("tData").textContent="--"; $("tAll").textContent="--";
+    log(`[API] 目标 ${selectedTarget} · ${image.length} B · ${$("kFile").textContent}`,"st");
+    const j=await apiRequest("/api/ota?target="+selectedTarget,{
+      method:"POST",headers:{"Content-Type":"application/octet-stream"},body:image
+    });
+    apiJobId=j.job_id;
+    let since=0;
+    for(;;){
+      const st=await apiRequest("/api/status");
+      if(st.job_id!==apiJobId) throw new Error("服务端任务已切换，请查看 API 日志");
+      const lg=await apiRequest("/api/log?since="+since);
+      for(const line of lg.lines || []) log("[API] "+line);
+      since=lg.total;
+      showApiProgress(st);
+      if(!st.running){
+        log(`[API] ${st.stage} · 总耗时 ${st.elapsed} s`,st.ok?"ok":"err");
+        chip(st.stage,st.ok?"on":""); break;
+      }
+      await sleep(500);
+    }
+  }catch(e){ log("[API] "+e.message,"err"); }
+  finally{ apiRunning=false; await syncApiState(); refreshGo(); }
+}
+async function syncApiState(){
+  if(location.hostname!=="127.0.0.1" && location.hostname!=="localhost") return;
+  try{
+    const st=await apiRequest("/api/status");
+    apiAvailable=true; apiRemote=!!st.running;
+    if(!apiRunning){ apiJobId=st.job_id; if(st.running) showApiProgress(st); }
+  }catch(_){ apiAvailable=false; }
+  refreshGo();
+}
+$("btnApiGo").onclick=apiUpgrade;
+setInterval(()=>{ if(!apiRunning && !running) syncApiState(); },2000);
+syncApiState();
 
 loadLibrary();
 $("drop").onclick=()=>$("file").click();
@@ -1146,10 +1204,11 @@ $("drop").ondragover=e=>{ e.preventDefault(); $("drop").classList.add("has"); };
 $("drop").ondragleave=()=>$("drop").classList.remove("has");
 $("drop").ondrop=e=>{ e.preventDefault(); const f=e.dataTransfer.files[0]; if(f) loadFile(f); };
 $("seg").onclick=e=>{
-  const b=e.target.closest("button"); if(!b) return;
+  const b=e.target.closest("button"); if(!b || running || apiRunning || apiRemote) return;
   [...$("seg").children].forEach(x=>x.classList.remove("on"));
   b.classList.add("on"); target=b.dataset.t;
   $("tailTarget").textContent=b.textContent.trim();
+  refreshGo();
 };
 
 /* 主题 */
@@ -1342,7 +1401,7 @@ window.ota = {
       ackAvg: rd.length?+(rd.reduce((a,b)=>a+b.dt,0)/rd.length).toFixed(0):null };
   },
   start: ()=>startUpgrade(),
-  stop: ()=>{ abort=true; },
+  stop: ()=>stopUpgrade(),
   /* 自检钩子：供离线用例直接驱动连接生命周期（不参与正常流程） */
   _internals:{
     gatt, withTimeout,
