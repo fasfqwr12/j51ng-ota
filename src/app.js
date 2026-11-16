@@ -592,7 +592,7 @@ function showJ5AA(meta, fwLen){
 /* ---------------- 只读状态查询（0x0610 -> 0x0612） ----------------
  * 这是唯一允许的"读状态"手段：不改设备 OTA 状态、不触发复位、不发 M 握手。
  * 32B 应答，多字节字段统一小端（与固件一致）。 */
-const BOOT_TARGET = {0:"NONE", 1:"M", 2:"R"};
+const BOOT_TARGET = {0:"NONE", 1:"M", 2:"R", 3:"S"};
 function parseStatus(p){
   if(!p || p.length < 32) return null;
   if(p[0]!==0x4A || p[1]!==0x35 || p[2]!==0x53 || p[3]!==0x54) return null;  /* "J5ST" */

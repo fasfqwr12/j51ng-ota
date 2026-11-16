@@ -66,6 +66,7 @@ const parseStatusRef = api._internals.parseStatus;
 {
   const s=parseStatusRef(buildStatusPayload({mode:0,target:1}));
   eq(s.mode,"boot","mode Boot");
+  eq(parseStatusRef(buildStatusPayload({mode:0,target:3})).target,"S","target S（Boot 自升级）");
   eq(parseStatusRef(new Uint8Array(8)), null, "short payload rejected");
   const bad=buildStatusPayload(); bad[0]=0x00;
   eq(parseStatusRef(bad), null, "bad signature rejected");
