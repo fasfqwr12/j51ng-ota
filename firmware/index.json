@@ -1,5 +1,5 @@
 {
-  "updated": 1794825671,
+  "updated": 1794832318,
   "items": [
     {
       "file": "M_9501-000-02166_20261114.hex",
@@ -31,11 +31,11 @@
       "target": "M",
       "targetName": "主控 M",
       "title": "M_app_latest",
-      "size": 99888,
-      "fileSize": 281003,
-      "sha256": "c7a9675987c734922c88e6b5d927963e195858126eb7447d20023ad0ec028a12",
+      "size": 99908,
+      "fileSize": 281069,
+      "sha256": "dba3b3fa96a46cb146882f196e299525d58a726a11b5ffe39704e9111505b90e",
       "version": "",
-      "mtime": 1794814207.415587
+      "mtime": 1794832318.3629436
     },
     {
       "file": "S_app_20261114.bin",
@@ -67,11 +67,11 @@
       "target": "S",
       "targetName": "蓝牙板 S",
       "title": "S_app_latest",
-      "size": 42176,
-      "fileSize": 42176,
-      "sha256": "a91e1f39516aaa1f6813e4b7dcc78aee5cf17982d93fcdda1925d50c28b2ba9f",
+      "size": 42120,
+      "fileSize": 42120,
+      "sha256": "46d431dfd0e7ceb8a33566c0427e9410ccf24a65984d50013e854a839382b0ac",
       "version": "",
-      "mtime": 1794825671.002348
+      "mtime": 1794832203.5907097
     },
     {
       "file": "S_app_latest.hex",
