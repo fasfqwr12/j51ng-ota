@@ -21,7 +21,7 @@ let writeChain=Promise.resolve();
 /* 实测（2026-11-16，S 板 / Windows，连接间隔 7.5 ms 已确认）：
    128 B/包 · gap=0 → 数据 4.96 s / 15.2 kB/s；gap=4 ms → 5.59 s / 13.5 kB/s。
    228 B 档反而慢（20.6 ms/包，LL PDU 仍 27 B 被拆 9 片），不要用。 */
-const TUNE = { win:32, gap:0 };
+const TUNE = { win:8, gap:4 }; // M/S 真机已验证的默认发送节奏
 /* ★ 单包负载上限。S 板(N32WB031)在 228 B 分包时数据能传完、ACK 全正常，
  *   但设备端算出的 SHA 与主机不一致（0x0402=0x11）。
  *   实测只有 128 B 分包能通过校验（68720 B → 537 包）。
@@ -433,15 +433,9 @@ function applyStatus(st){
 }
 
 /* 发一次握手并等应答（唯一允许改变设备模式的调用） */
-async function sendHandshake(ms=4000){
-  try{
-    return await request(T.HS, devInfo(target), T.HSR, ms);
-  }catch(e){
-    log("握手写入失败（"+e.message+"），重连后重试","dim");
-    await gatt(4000, true);
-    hsReady=null;
-    return await request(T.HS, devInfo(target), T.HSR, ms);
-  }
+async function sendHandshake(ms=target === "M" ? 12000 : 5000){
+  frames = frames.filter(f=>f.t!==T.HSR);
+  return await request(T.HS, devInfo(target), T.HSR, ms);
 }
 
 async function probeMode(){
@@ -852,21 +846,22 @@ async function startUpgrade(){
       /* 已在 Boot：发一次握手进入等参数阶段，随后复用 */
       stage("握手");
       r = await sendHandshake();
-      hsReady = {r, t: Date.now()};
+      hsReady = r ? {r, t: Date.now()} : null;
       setBadge("boot");
     }else if(target === "S"){
       /* S 自升级：只有这一步会触发 APP 交班复位 */
       stage("切换 Boot");
       const bootR = await enterBoot();
       if(!bootR) throw new Error("自动交班进 Boot 失败");
-      hsReady = {r: bootR, t: Date.now()};
+      r = bootR;
+      hsReady = null;
       setBadge("boot");
     }else{
       /* M/R：留在 S APP 透传，S 绝不复位 */
       stage("握手");
       log(`目标 ${target}：走 S APP 透传，复位的是 ${target} 自己，蓝牙板保持连接`,"dim");
       r = await sendHandshake();
-      hsReady = {r, t: Date.now()};
+      hsReady = r ? {r, t: Date.now()} : null;
       setBadge("app");
     }
 
@@ -883,13 +878,7 @@ async function startUpgrade(){
       hsReady=null;
       log("已重连设备","ok");
     }
-    if(!r){
-      if(hsReady && Date.now()-hsReady.t < 20000){ r = hsReady.r; hsReady=null; log("[1] 复用已完成的握手","st"); }
-    }
-    if(!r){
-      r = await sendHandshake();
-      if(!r) throw new Error("握手无应答：设备既不在 APP 也不在 Boot？请确认目标与固件");
-    }
+    if(!r) throw new Error(`${target} 握手无应答；尚未确认目标进入升级态，本轮停止`);
     if(r[0]!==0){
       const st=r[0];
       let msg="握手状态 0x"+st.toString(16);
@@ -936,7 +925,7 @@ async function startUpgrade(){
     r = await request(T.PM, pm, T.PMR, 25000);
     if(!r) throw new Error("参数无应答");
     if(r[0]!==0) throw new Error("参数被拒 0x"+r[0].toString(16));
-    log("[2] 参数已接受，目标 APP 区擦除完成","st");
+    log(target === "M" ? "[2] 参数已接受，M Boot 已就绪" : "[2] 参数已接受，目标 APP 区擦除完成","st");
 
     stage("传输数据");
     const td=performance.now();
@@ -962,13 +951,20 @@ async function startUpgrade(){
         if(f.p.length<3) continue;
         const code=f.p[0], seq=rd16(f.p,1);
         if(f.t===T.ACK && code===0 && seq+1<=sent && seq+1>acked){ acked=seq+1; moved=true; }
-        else if(f.t===T.NACK){ rtx++; acked=Math.min(acked,seq); moved=true; }
+        else if(f.t===T.NACK){
+          if(code!==0x10 || seq>sent) throw new Error(`设备拒绝数据：状态 0x${code.toString(16).padStart(2,"0")}，seq=${seq}`);
+          rtx++; acked=seq; sent=seq; moved=true;
+          frames=frames.filter(x=>x.t!==T.ACK && x.t!==T.NACK);
+          log(`    NACK 0x10，回到 seq=${seq} 重传`,"dim");
+          break;
+        }
       }
       if(window.__perf) window.__perf.rounds.push({dt:Date.now()-r0, acked, sent, moved});
       if(!moved && acked<sent){
         if(frames.length>50) frames.length=0;
         stale++;
-        if(stale>60) throw new Error("设备无应答（ACK 超时）");
+        if(stale%5===0){ sent=acked; rtx++; log(`    ACK 未推进，回到 seq=${acked} 重传（${rtx}）`,"dim"); }
+        if(stale>30 || rtx>32) throw new Error(`设备无应答（ACK 超时，已确认 ${acked}/${total}）`);
       }else{ stale=0; }
       const el=(performance.now()-td)/1000;
       const pct=Math.round(acked/total*100);
