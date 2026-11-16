@@ -54,8 +54,19 @@ const u32 = n => new Uint8Array([(n>>>24)&255,(n>>>16)&255,(n>>>8)&255,n&255]);
 const rd16 = (b,o) => (b[o]<<8)|b[o+1];
 
 /* ---------------- 日志 / UI ---------------- */
+let __lastLogMsg="", __lastLogAt=0, __lastLogRepeat=0;
 function log(msg, cls=""){
   const box=$("log"), t=new Date().toTimeString().slice(0,8);
+  /* 同一句话 2.5 s 内只打一次，重复次数合并到下一行，避免刷屏 */
+  const now=performance.now();
+  if(msg===__lastLogMsg && now-__lastLogAt<2500){ __lastLogRepeat++; __lastLogAt=now; return; }
+  if(__lastLogRepeat>0){
+    const d0=document.createElement("div");
+    d0.textContent = t + "  （上一条重复 " + __lastLogRepeat + " 次）";
+    box.appendChild(d0);
+    __lastLogRepeat=0;
+  }
+  __lastLogMsg=msg; __lastLogAt=now;
   /* 设备回传的字节可能是任意二进制：一律走 textContent，不拼 HTML */
   const d=document.createElement("div");
   if(cls) d.className=cls;
@@ -785,7 +796,7 @@ async function waitReconnect(maxMs=20000, waitDiscMs=12000, trustApp=false){
     n++;
     if(__userDisc || __cancelled){ log("已手动断开，停止自动重连","dim"); return null; }
     try{
-      await gatt(2500, true);
+      await gatt(1200, true);   /* 设备复位后约 3 s 才开始广播：短超时+密重试，8 s 降到 3~4 s */
       const secs=((performance.now()-t0)/1000).toFixed(1);
       const st = await queryStatus(1200, 1);
       if(!st){
@@ -798,7 +809,7 @@ async function waitReconnect(maxMs=20000, waitDiscMs=12000, trustApp=false){
       return st.mode;
     }catch(e){
       if(n%5===0) log(`    等待设备重启…（${Math.round((performance.now()-t0)/1000)} s）`,"dim");
-      await sleep(800);
+      await sleep(350);
     }
   }
   return null;
