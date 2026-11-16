@@ -402,39 +402,50 @@ function enterBoot(){
   return __bootLock;
 }
 
-/* ---------------- 模式识别 ---------------- */
-async function probeMode(){
-  frames.length=0;
-  let r = await request(T.HS, devInfo(target), T.HSR, 2000);
-  if(r){
-    /* 新固件 APP 也回握手：按版本区分，ff.ff.ff.ff 才是 Boot */
-    const v0 = r.length>=21 ? [...r.slice(17,21)].map(b=>b.toString(16).padStart(2,"0")).join(".") : "";
-    if(!v0.startsWith("ff.ff")){
-      setBadge("app");
-      $("kHw").textContent = new TextDecoder().decode(r.slice(1,17)).replace(/[\uFFFD\x00]/g,"") || "—";
-      $("kVer").textContent = v0 || "—";
-      $("hMeta").textContent = "APP 模式 · 点「开始升级」将自动交班进入 Boot";
-      log(`模式：APP（版本 ${v0}），开始升级时自动交班`,"dim");
-      hsReady = null;
-      return "app";
-    }
-    setBadge("boot");
-    const hw=new TextDecoder().decode(r.slice(1,17)).replace(/[\uFFFD\x00]/g,"");
-    $("kHw").textContent = hw || "—";
-    $("kVer").textContent = r.length>=21 ? [...r.slice(17,21)].map(b=>b.toString(16).padStart(2,"0")).join(".") : "—";
-    $("hMeta").textContent = "Boot 模式，可直接升级";
-    log("模式：Boot（握手有应答）","ok");
-    hsReady = {r, t: Date.now()};
-    return "boot";
+/* ---------------- 模式识别（只读，无副作用） ---------------- */
+/* 把 0x0612 的结果刷到界面 */
+function applyStatus(st){
+  setBadge(st.mode);
+  $("kHw").textContent = st.mode==="boot" ? "J51VA-S (Boot)" : (st.metaValid ? "J51VA-S" : "—");
+  $("kVer").textContent = st.metaValid ? `${(st.fwVersion>>8)&0xFF}.${st.fwVersion&0xFF}` : "—";
+  $("kMeta").textContent = st.metaValid
+    ? `运行镜像 ${st.size} B · crc ${h(st.payloadCrc)} · 容量 ${st.capacity} B`
+    : "无镜像头信息";
+  $("hMeta").textContent = st.mode==="boot"
+    ? `Boot 模式 · 可直接升级${st.resetPend?" · 已排定复位":""}`
+    : `APP 模式 · 运行 v${(st.fwVersion>>8)&0xFF}.${st.fwVersion&0xFF}`;
+  if(st.resetPend) log("    设备已排定复位（升级交班中）","dim");
+  if(st.metaValid && !st.hcrcOk) log("    ⚠ 设备镜像头自校验不通过","err");
+}
+
+/* 发一次握手并等应答（唯一允许改变设备模式的调用） */
+async function sendHandshake(ms=4000){
+  try{
+    return await request(T.HS, devInfo(target), T.HSR, ms);
+  }catch(e){
+    log("握手写入失败（"+e.message+"），重连后重试","dim");
+    await gatt(4000, true);
+    hsReady=null;
+    return await request(T.HS, devInfo(target), T.HSR, ms);
   }
-  /* ★ 只识别模式，不自动进 Boot。
-   * 进 Boot 是「开始升级」才做的动作：连接/读状态不该改变设备运行模式，
-   * 否则用户只是想看一眼状态，设备就被踢进 bootloader 不再正常工作。 */
-  setBadge("app");
-  $("hMeta").textContent = "APP 模式 · 点「开始升级」将自动进入 Boot";
-  log("模式：APP（握手无应答，未切换）","dim");
+}
+
+async function probeMode(){
+  const st = await queryStatus(1200, 1);
   hsReady = null;
-  return "app";
+  if(!st){
+    setBadge(null);
+    $("hMeta").textContent = "模式未知 · 设备无只读查询应答（可能是旧固件）";
+    $("kHw").textContent = "—"; $("kVer").textContent = "—";
+    log("只读查询无应答。不在这里发握手：对 S APP 来说握手=交班复位，"
+      + "只有点「开始升级」才会做。","dim");
+    return "unknown";
+  }
+  applyStatus(st);
+  log(`只读查询 → ${st.mode==="boot"?"Boot":"APP"}`
+    + (st.metaValid ? ` · v${(st.fwVersion>>8)&0xFF}.${st.fwVersion&0xFF} · ${st.size} B` : "")
+    + "（未握手，设备状态未改变）","ok");
+  return st.mode;
 }
 
 /* ---------------- 固件 ---------------- */
@@ -578,6 +589,70 @@ function showJ5AA(meta, fwLen){
   }
 }
 
+/* ---------------- 只读状态查询（0x0610 -> 0x0612） ----------------
+ * 这是唯一允许的"读状态"手段：不改设备 OTA 状态、不触发复位、不发 M 握手。
+ * 32B 应答，多字节字段统一小端（与固件一致）。 */
+const BOOT_TARGET = {0:"NONE", 1:"M", 2:"R"};
+function parseStatus(p){
+  if(!p || p.length < 32) return null;
+  if(p[0]!==0x4A || p[1]!==0x35 || p[2]!==0x53 || p[3]!==0x54) return null;  /* "J5ST" */
+  if(p[4] !== 1) return null;
+  const dv = new DataView(p.buffer, p.byteOffset, p.byteLength);
+  return {
+    mode      : p[5]===0 ? "boot" : "app",
+    flags     : dv.getUint16(6, true),
+    size      : dv.getUint32(8, true),
+    payloadCrc: dv.getUint32(12, true),
+    fwVersion : dv.getUint16(16, true),
+    hwVersion : dv.getUint16(18, true),
+    phase     : p[20],
+    target    : BOOT_TARGET[p[21]] || "?",
+    maxPayload: dv.getUint16(22, true),
+    capacity  : dv.getUint32(24, true),
+    received  : dv.getUint32(28, true),
+    metaValid : !!(dv.getUint16(6, true) & 0x0001),
+    hcrcOk    : !!(dv.getUint16(6, true) & 0x0002),
+    resetPend : !!(dv.getUint16(6, true) & 0x0004)
+  };
+}
+async function queryStatus(ms=1000, retry=1){
+  for(let k=0;k<=retry;k++){
+    frames.length=0;
+    try{ await send(0x0610, new Uint8Array(0)); }
+    catch(e){ if(k===retry) return null; continue; }
+    const p = await waitFrame(0x0612, ms);
+    const st = parseStatus(p);
+    if(st) return st;
+  }
+  return null;
+}
+
+/* ---------------- 本地镜像闸门（先验，有副作用动作之前） ----------------
+ * S 镜像必须带 J5AA 头且自洽；M 镜像按约定不带头，只做尺寸检查。
+ * payload_crc32 口径：整镜像去掉 [0x200,0x230) 这段头块。 */
+function crc32Image(img){
+  const a=img.subarray(0, J5AA_OFF), b=img.subarray(J5AA_OFF + J5AA_SIZE);
+  const buf=new Uint8Array(a.length + b.length);
+  buf.set(a,0); buf.set(b,a.length);
+  return crc32(buf);
+}
+function validateLocalImage(img, target){
+  if(!img || !img.length) throw new Error("固件为空");
+  if(target !== "S") return null;                 /* M/R 镜像无 J5AA 头 */
+  const j = parseJ5AA(img);
+  if(!j) throw new Error("镜像缺少 J5AA 头（需 48B @0x200）：请确认选的是 APP 镜像而不是裸 bin/旧版 hex");
+  if(!j.hcrcOk) throw new Error(`镜像头 CRC 不符（存 0x${h(j.hcrcStored)} / 算 0x${h(j.hcrcCalc)}），文件已损坏`);
+  if(j.imageType !== 0) throw new Error("这不是 APP 镜像（image_type=" + j.imageType + "）");
+  if(j.target !== 1) throw new Error("镜像目标不是 N32 蓝牙板");
+  if(j.size !== img.length)
+    throw new Error(`镜像头声明 ${j.size} B，实际文件 ${img.length} B，不一致`);
+  const calc = crc32Image(img);
+  if(calc !== j.payloadCrc)
+    throw new Error(`镜像内容 CRC 不符（头 0x${h(j.payloadCrc)} / 实算 0x${h(calc)}）`);
+  return j;
+}
+const h = v => (v>>>0).toString(16).padStart(8,"0").toUpperCase();
+
 async function loadFile(f){
   try{
     $("kFile").textContent=f.name;
@@ -672,23 +747,12 @@ async function useLibItem(it, btn){
 
 /* ---------------- 升级 ---------------- */
 
-/* 只读模式判断：握手有应答=Boot，无应答=APP（不主动切 Boot） */
+/* 只读模式判断：只用 0x0610 查询，绝不发握手（握手对 S APP = 交班复位） */
+const modeTxt = m => m==="boot" ? "Boot" : (m==="app" ? "APP" : "模式未知");
+
 async function probeModeOnly(timeout=2000){
-  /* 首次握手常常无应答（复用死会话 / 设备刚复位），单次就判 APP 会误判。
-   * 最多试 3 次；仍无应答按 APP 处理 —— enterBoot 里有"已在 Boot 直接返回"的快路。 */
-  for(let k=0;k<3;k++){
-    frames.length=0;
-    const r = await request(T.HS, devInfo(target), T.HSR, k===0?timeout:1200);
-    if(r){
-      /* 新固件 APP 也会应答 0x0102，只能按版本判：ff.ff.ff.ff = Boot */
-      const v = r.length>=21 ? [...r.slice(17,21)].map(b=>b.toString(16).padStart(2,"0")).join(".") : "";
-      return v.startsWith("ff.ff") ? "boot" : "app";
-    }
-    /* 复用链路死了就重连再试（gatt() 会主动断开旧会话拿新的），别在原地空转 */
-    try{ await gatt(4000); }catch(_){}
-    await sleep(200);
-  }
-  return "app";
+  const st = await queryStatus(Math.max(600, timeout), 1);
+  return st ? st.mode : "unknown";
 }
 /* 设备复位后自动重连：每 1.2 s 试一次，直到回来或超时 */
 async function waitReconnect(maxMs=20000, waitDiscMs=12000, trustApp=false){
@@ -705,9 +769,9 @@ async function waitReconnect(maxMs=20000, waitDiscMs=12000, trustApp=false){
   }
 
   /* ★ 阶段2：重连。
-   * trustApp=true（0x0502 已确认接管）：只确认"能连上"，绝不再发 0x0101 ——
-   * 新固件 APP 收到握手就会交班复位，会把刚升好的 APP 又踢回 Boot（17:04 那次）。
-   * trustApp=false（0x0502 丢失）：才用握手判一次模式。 */
+   * 只用 0x0610 只读查询判模式：绝不再发 0x0101 ——
+   * 新固件 APP 收到握手就会交班复位，会把刚升好的 APP 又踢回 Boot。
+   * trustApp 参数保留只为兼容旧调用，判定一律以设备实际应答为准。 */
   let n=0;
   while(performance.now()-t0<maxMs){
     n++;
@@ -715,15 +779,15 @@ async function waitReconnect(maxMs=20000, waitDiscMs=12000, trustApp=false){
     try{
       await gatt(2500, true);
       const secs=((performance.now()-t0)/1000).toFixed(1);
-      if(trustApp){
-        log(`    重连成功（第 ${n} 次，${secs} s）`,"ok");
-        setBadge("app");
-        return "app";
+      const st = await queryStatus(1200, 1);
+      if(!st){
+        log(`    重连成功（第 ${n} 次，${secs} s），但只读查询无应答 · 模式未知`,"dim");
+        return "unknown";
       }
-      const m1 = await probeModeOnly(900);
-      log(`    重连成功（第 ${n} 次，${secs} s）· 判定 ${m1==="app"?"APP":"Boot"}`,"ok");
-      setBadge(m1);
-      return m1;
+      log(`    重连成功（第 ${n} 次，${secs} s）· ${st.mode==="boot"?"Boot":"APP"}`
+        + (st.metaValid ? ` · ${st.size} B / crc ${h(st.payloadCrc)}` : ""),"ok");
+      applyStatus(st);
+      return st.mode;
     }catch(e){
       if(n%5===0) log(`    等待设备重启…（${Math.round((performance.now()-t0)/1000)} s）`,"dim");
       await sleep(800);
@@ -749,25 +813,44 @@ async function startUpgrade(){
   window.__perf={wr:[],rounds:[]};
   log(`目标 ${target} · 镜像 ${img.length} B · win=${TUNE.win} gap=${TUNE.gap}`);
   try{
-    /* ★ 预检：清掉上一轮残留的握手缓存，重新握手看真实模式。
-     * 设备在 Boot → 复用这次握手直接升级；在 APP → 交班流程接管。 */
-    /* ★ 预检只发一次握手，结果直接决定走哪条分支：
-     *   ff.ff.ff.ff → Boot：复用这次握手，直接进参数阶段；
-     *   其它        → APP：交给 enterBoot 交班（它自己等设备复位断开）。 */
-    const pre = await freshHandshake();
-    if(pre && pre.r[0]!==0){
-      throw new Error("握手被拒 0x"+pre.r[0].toString(16)+"（Boot 只收『蓝牙板 S』，请检查目标是不是蓝牙板 S）");
+    /* ★ 本地闸门先跑：镜像不自洽就直接停，绝不先碰设备 */
+    if(target === "S"){
+      const j = validateLocalImage(img, target);
+      log(`本地校验通过：J5AA v${j.verText} · ${j.size} B · crc ${h(j.payloadCrc)}`,"dim");
     }
-    if(pre && pre.v.startsWith("ff.ff")){
-      hsReady = {r: pre.r, t: Date.now()};      /* Boot：不再多发握手 */
-    }else{
+
+    /* ★ 第一步只用只读查询识别模式，不握手、不复位、不发 M 命令 */
+    const st0 = await queryStatus(1200, 1);
+    log(st0
+      ? `只读查询 → ${st0.mode==="boot"?"Boot":"APP"}`
+        + `（运行镜像 ${st0.size} B / crc ${h(st0.payloadCrc)} / 容量 ${st0.capacity} B`
+        + `${st0.resetPend?" / 已排定复位":""}）`
+      : "只读查询无应答（设备可能是旧固件）","dim");
+    if(st0) applyStatus(st0);
+
+    let r = null;
+    if(st0 && st0.mode === "boot"){
+      /* 已在 Boot：发一次握手进入等参数阶段，随后复用 */
+      stage("握手");
+      r = await sendHandshake();
+      hsReady = {r, t: Date.now()};
+      setBadge("boot");
+    }else if(target === "S"){
+      /* S 自升级：只有这一步会触发 APP 交班复位 */
       stage("切换 Boot");
-      log("当前在 APP（预检握手已下发），等待设备自己复位…","st");
       const bootR = await enterBoot();
       if(!bootR) throw new Error("自动交班进 Boot 失败");
-      setBadge("boot");
       hsReady = {r: bootR, t: Date.now()};
+      setBadge("boot");
+    }else{
+      /* M/R：留在 S APP 透传，S 绝不复位 */
+      stage("握手");
+      log(`目标 ${target}：走 S APP 透传，复位的是 ${target} 自己，蓝牙板保持连接`,"dim");
+      r = await sendHandshake();
+      hsReady = {r, t: Date.now()};
+      setBadge("app");
     }
+
     // 设备刚重启过，链路可能还没恢复：先确保连通，且不复用旧握手
     if(!(device && device.gatt.connected)){
       stage("重连");
@@ -781,29 +864,17 @@ async function startUpgrade(){
       hsReady=null;
       log("已重连设备","ok");
     }
-    stage("握手");
-    let r = null;
-    if(hsReady && Date.now()-hsReady.t < 20000){ r = hsReady.r; hsReady=null; log("[1] 复用已完成的握手","st"); }
     if(!r){
-      try{
-        r = await request(T.HS, devInfo(target), T.HSR, 4000);
-      }catch(e){
-        log("握手写入失败（"+e.message+"），重连后重试","dim");
-        await gatt(4000, true); hsReady=null;
-        r = await request(T.HS, devInfo(target), T.HSR, 4000);
-      }
-      if(!r){
-        log("握手无应答 → 设备在 APP，自动切 Boot 后重试","dim");
-        stage("切换 Boot");
-        r = await enterBoot();
-        if(!r) throw new Error("握手无应答，且自动切 Boot 失败");
-        setBadge("boot");
-      }
+      if(hsReady && Date.now()-hsReady.t < 20000){ r = hsReady.r; hsReady=null; log("[1] 复用已完成的握手","st"); }
+    }
+    if(!r){
+      r = await sendHandshake();
+      if(!r) throw new Error("握手无应答：设备既不在 APP 也不在 Boot？请确认目标与固件");
     }
     if(r[0]!==0){
       const st=r[0];
       let msg="握手状态 0x"+st.toString(16);
-      if(st===0xE1) msg="设备在 Boot，只接受『蓝牙板 S』——请把目标切到蓝牙板 S 再点开始升级（0xE1=目标不匹配）";
+      if(st===0xE1) msg="握手被拒 0xE1（硬件码不匹配）—— Boot 只接受『蓝牙板 S』，M/R 需在 S APP 下透传";
       else if(st===0x10) msg="握手被拒 0x10（参数/尺寸错误）";
       throw new Error(msg);
     }
@@ -816,15 +887,29 @@ async function startUpgrade(){
     pkt = want & ~3;
     if(pkt<4) pkt=4;
     if(devMax && devMax>pkt)
-      log(`    设备报 maxpkt=${devMax}，但按 ${pkt} B 分包（228 B 会导致 SHA 校验失败）`,"dim");
+      log(`    设备报 maxpkt=${devMax}，本版按 ${pkt} B 分包（228 B 档留待单独验证）`,"dim");
     total = Math.ceil(img.length/pkt);
     log(`[1b] 分包 pkt=${pkt} B × ${total}（设备 maxpkt=${devMax||"?"}）`,"dim");
     $("sPkt").textContent = `0/${total}`;
 
-    stage("擦除暂存区");
+    /* 容量闸门：设备自报的可用容量必须装得下 */
+    const capDev = st0 ? st0.capacity : 0;
+    if(capDev && img.length > capDev)
+      throw new Error(`镜像 ${img.length} B 超过设备可用容量 ${capDev} B，已停止（未发参数）`);
+
+    stage("擦除目标 APP 区");
     const sha=await sha256(img);
     const pm=new Uint8Array(38);
-    pm.set(u32(img.length),0); pm.set(sha,4); pm.set(u16(pkt),36);
+    pm.set(u32(img.length),0);
+    if(target === "M"){
+      /* M Boot 只认 CRC32(整镜像) 小端，后 28 字节忽略 */
+      const c = crc32(img);
+      pm.set(new Uint8Array([c&0xFF,(c>>>8)&0xFF,(c>>>16)&0xFF,(c>>>24)&0xFF]), 4);
+      log(`    M 校验参考 = CRC32 0x${h(c)}（LE）`,"dim");
+    }else{
+      pm.set(sha,4);
+    }
+    pm.set(u16(pkt),36);
     r = await request(T.PM, pm, T.PMR, 25000);
     if(!r) throw new Error("参数无应答");
     if(r[0]!==0) throw new Error("参数被拒 0x"+r[0].toString(16));
@@ -874,22 +959,19 @@ async function startUpgrade(){
     log(`[3] 数据完成 ${img.length} B · ${dt.toFixed(1)} s · 重传 ${rtx}`,"st");
 
     stage("校验");
-    // 设备要先算整片 SHA，0x0401 是无响应写，可能丢 → 重发
+    // 设备按接收累计 CRC 校验（0x0401/0x0402 保留为兼容应答，可能丢 → 重发）
     for(let k=1;k<=5;k++){
       r = await request(T.SHA, sha, T.SHAR, 8000);
       if(r) break;
-      log(`    0x0401 第 ${k} 次无应答（设备可能在算 SHA），重发…`,"dim");
-      await sleep(1500);
+      log(`    0x0401 第 ${k} 次无应答（设备仍在收尾），重发…`,"dim");
+      await sleep(800);
     }
-    if(!r || r[0]!==0) throw new Error("SHA-256 校验失败");
-    log("[4] SHA-256 匹配","st");
+    if(!r || r[0]!==0) throw new Error("设备校验失败（0x0402 状态 0x"+(r?r[0].toString(16):"无应答")+"）");
+    log("[4] 设备校验通过","st");
 
-    stage("写入并跳转");
-    log("[5] 正在写入并跳转，设备会复位重启（约 10~20 s，请勿断电）","dim");
-    // 0x0501：升级期间蓝牙板可能主动断链，断了重连再发；单次只等 3 s，多发几次
+    stage("完成放行");
+    log("[5] 请求设备接管并跳转（设备会复位重启，请勿断电）","dim");
     r = null;
-    // 设备在把暂存区搬到 APP 区：先给 4 s 安静时间，期间发帧会拖慢它
-    await sleep(4000);
     for(let k=1;k<=30;k++){
       if(!(device && device.gatt.connected)){
         try{ await gatt(); log("    链路已断开，已重连","dim"); }
@@ -897,19 +979,13 @@ async function startUpgrade(){
       }
       r = await request(T.DONE, new Uint8Array(0), T.DONER, 1500);
       if(r) break;
-      if(k%4===0) log(`    设备仍在写入，等待确认…（${k}/30）`,"dim");
+      if(k%4===0) log(`    设备仍在收尾，等待确认…（${k}/30）`,"dim");
       await sleep(500);
     }
     if(!r){
-      // 设备可能已经写完直接复位，0x0502 丢在断开里 —— 重连看它跑的是不是新 APP
       log("未收到 0x0502（设备可能已复位），重连确认实际状态…","dim");
       const m0 = await waitReconnect(15000);
-      if(m0==="app"){
-        log("[7] ✅ 升级成功（0x0502 丢失，但设备已重启并运行新 APP）","st");
-        chip("升级成功","on"); stage("升级成功");
-        $("tAll").textContent=((performance.now()-t0)/1000).toFixed(1)+" s";
-        return;
-      }
+      if(m0==="app" && await confirmRunningImage(img, "0x0502 丢失")) return finishOk(t0, "0x0502 丢失，设备已运行新 APP");
       throw new Error("等待设备确认超时，且设备未回到 APP");
     }
     if(r[0]!==0) throw new Error("设备报告写入失败，状态码 0x"+r[0].toString(16).padStart(2,"0"));
@@ -917,11 +993,12 @@ async function startUpgrade(){
 
     $("bar").style.width="100%"; $("sPct").textContent="100%";
 
-    // 主控/雷达：副板固件没变，新 Boot 会原地待命、不断链，直接判成功
+    // M/R：升级的是目标自己的 APP，蓝牙板保持连接、不重启
     if(target !== "S"){
       const tot=((performance.now()-t0)/1000).toFixed(1);
       $("tAll").textContent=tot+" s";
-      log("[7] ✅ 升级成功：目标已升级，蓝牙板保持连接（无需重连）","st");
+      log("[7] ✅ 传输与校验完成：目标已接收并校验通过，蓝牙板保持连接","st");
+      log("    注意：这一步只证明传输/校验/放行成功；目标是否已运行新固件需由该目标自己的应答确认","dim");
       chip("升级成功","on"); stage("升级成功");
       log(`==== 总耗时 ${tot} s（数据阶段 ${$("tData").textContent}）====`,"st");
       return;
@@ -930,38 +1007,14 @@ async function startUpgrade(){
     stage("等待设备重启");
     log("[6] 设备复位中，等待重新连接…","dim");
     const mode = await waitReconnect(20000, 12000, true);
-    if(mode==="app"){
-      log("[7] ✅ 升级成功：设备已重启并运行新 APP","st");
-      chip("升级成功","on");
-      stage("升级成功");
-    }else if(mode==="boot"){
+    if(mode === "boot"){
       log("[7] ❌ 升级未完成：设备复位后仍停在 Boot（镜像未跳转）","err");
-      log("    可能原因：APP 头校验失败 / 搬运后完整性记录不匹配 / 镜像不完整","dim");
+      log("    可能原因：镜像头校验失败 / 完整性记录不匹配 / 镜像不完整","dim");
       chip("需重试",""); stage("需重试");
-    }else{
+    }else if(mode !== "app"){
       throw new Error("已派发但设备 30 s 内未回来，请断电重启确认");
-    }
-    /* ★ 版本确认：回读设备当前镜像的 J5AA 头，与刚下发的逐字段比对。
-     * 只有 payload_size + payload_crc32 都对上，才算真的升级成功。 */
-    if(mode==="app"){
-      const sent = window.__j5aa;
-      const h8 = v => (v>>>0).toString(16).padStart(8,"0").toUpperCase();
-      log("    回读设备镜像头，确认运行版本…","dim");
-      const dev = await readDeviceMeta(3000);
-      if(!dev){
-        /* 新固件不再支持 53A2/0xFE 镜像头回读：跳过即可，0x0502=0x00 已确认接管 */
-        log("[7] 设备不支持镜像头回读（新固件无 0xFE），跳过版本核对","dim");
-      }else if(dev.none){
-        log("[7] ⚠ 版本未确认：设备回报没有 J5AA 头（旧镜像）","err");
-        chip("版本未确认","");
-      }else if(sent && dev.size===sent.size && dev.payloadCrc===sent.payloadCrc){
-        log(`[7] ✅ 版本已确认：设备运行 v${dev.verText} · ${dev.size} B · crc ${h8(dev.payloadCrc)}（与下发一致）`,"st");
-        chip("升级成功 · 已确认","on");
-      }else{
-        log(`[7] ❌ 版本不匹配：设备 ${dev.size} B / crc ${h8(dev.payloadCrc)}`
-          + `　下发 ${sent?sent.size:"?"} B / crc ${sent?h8(sent.payloadCrc):"?"}`,"err");
-        chip("版本不匹配","");
-      }
+    }else if(await confirmRunningImage(img, "复位后")){
+      finishOk(t0, "设备已运行新 APP，版本已确认");
     }
     const __tot=((performance.now()-t0)/1000).toFixed(1);
     $("tAll").textContent=__tot+" s";
@@ -976,18 +1029,43 @@ async function startUpgrade(){
   }
 }
 
-/* 开始升级前先跑一次干净的模式识别：重连拿新会话 + 重新握手 + 打印版本。
- * 避免上次升级残留的 hsReady（可能是 0xE1 那次目标错的应答）污染这一轮。 */
-async function freshHandshake(){
-  try{ await gatt(4000); }catch(e){ log("重连失败："+e.message,"dim"); }
-  hsReady=null;
-  frames.length=0;
-  const r = await request(T.HS, devInfo(target), T.HSR, 2000);
-  if(!r) return null;
-  const v=[...r.slice(17,21)].map(b=>b.toString(16).padStart(2,"0")).join(".");
-  log(`预检握手 → ${v.startsWith("ff.ff")?"Boot":"APP"}（${v}）状态=0x${r[0].toString(16)}`,"dim");
-  if(r[0]===0 && v.startsWith("ff.ff")) hsReady={r, t: Date.now()};
-  return {r, v};
+/* 版本确认：只读查询设备当前运行的镜像身份，与刚下发的逐字段比对。
+ * 只有 APP 模式 + size/payload_crc 都对上，才算真的升级成功。 */
+async function confirmRunningImage(img, tag){
+  const sent = parseJ5AA(img);
+  const st = await queryStatus(1500, 1);
+  if(!st){
+    log(`[7] ⚠ 版本未确认（${tag}）：设备对只读查询无应答`,"err");
+    chip("版本未确认","");
+    return false;
+  }
+  if(st.mode !== "app"){
+    log(`[7] ❌ 设备仍不在 APP 模式（${tag}）`,"err");
+    return false;
+  }
+  if(!st.metaValid){
+    log(`[7] ⚠ 版本未确认（${tag}）：设备没有 J5AA 头（旧镜像）`,"err");
+    chip("版本未确认","");
+    return false;
+  }
+  if(sent && st.size === sent.size && st.payloadCrc === sent.payloadCrc){
+    log(`[7] ✅ 版本已确认：设备运行 ${st.size} B · crc ${h(st.payloadCrc)}（与下发一致）`,"st");
+    return true;
+  }
+  log(`[7] ❌ 版本不匹配（${tag}）：设备 ${st.size} B / crc ${h(st.payloadCrc)}`
+    + `　下发 ${sent?sent.size:"?"} B / crc ${sent?h(sent.payloadCrc):"?"}`,"err");
+  chip("版本不匹配","");
+  return false;
+}
+
+function finishOk(t0, msg){
+  const tot=((performance.now()-t0)/1000).toFixed(1);
+  $("tAll").textContent=tot+" s";
+  log(`[7] ✅ 升级成功：${msg}`,"st");
+  chip("升级成功 · 已确认","on");
+  stage("升级成功");
+  log(`==== 总耗时 ${tot} s（数据阶段 ${$("tData").textContent}）====`,"st");
+  return true;
 }
 
 /* ---------------- 事件 ---------------- */
@@ -1134,7 +1212,7 @@ window.ota = {
        重复请求只会让 chooser 空列表或把现有连接踢掉。直接复用现有连接。 */
     if(device && device.gatt && device.gatt.connected && chW && chN){
       const m = await probeModeOnly(1200);
-      log(`复用现有连接（${device.name||"AIMTECH VHR"}）→ ${m==="boot"?"Boot":"APP"}`,"ok");
+      log(`复用现有连接（${device.name||"AIMTECH VHR"}）→ ${modeTxt(m)}`,"ok");
       setBadge(m); return m;
     }
     /* 已授权设备：用 getDevices() 直接连，不弹 chooser */
@@ -1148,7 +1226,7 @@ window.ota = {
           await gatt(8000);
           const m = await probeModeOnly(1500);
           setBadge(m);
-          log(`自动连接已授权设备 ${device.name} → ${m}`,"ok");
+          log(`自动连接已授权设备 ${device.name} → ${modeTxt(m)}`,"ok");
           return m;
         }
       }catch(e){ log(`已授权直连失败：${e.message}`,"dim"); }
@@ -1156,7 +1234,7 @@ window.ota = {
     /* 最后才按名字请求（需要用户手势；由 UI 按钮触发） */
     while(performance.now()-t0<maxMs){
       n++;
-      try{ await gatt(1500); const m=await probeModeOnly(1000); log(`扫描成功（第 ${n} 次，${((performance.now()-t0)/1000).toFixed(1)} s）→ ${m==="boot"?"Boot":"APP"}`,"ok"); return m; }
+      try{ await gatt(1500); const m=await probeModeOnly(1000); log(`扫描成功（第 ${n} 次，${((performance.now()-t0)/1000).toFixed(1)} s）→ ${modeTxt(m)}`,"ok"); return m; }
       catch(e){ await sleep(400); }
     }
     throw new Error("扫描超时：设备未重新广播");
@@ -1225,6 +1303,7 @@ window.ota = {
       device=d;
       d.addEventListener("gattserverdisconnected", onDisconnect);
     },
-    reset(){ __cancelled=false; __userDisc=false; __devDisc=false; server=null; chW=null; chN=null; }
+    reset(){ __cancelled=false; __userDisc=false; __devDisc=false; server=null; chW=null; chN=null; },
+    queryStatus, validateLocalImage, crc32Image, parseStatus
   }
 };
