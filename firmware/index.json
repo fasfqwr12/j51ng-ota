@@ -1,5 +1,5 @@
 {
- "updated": 1794882304,
+ "updated": 1794883135,
  "items": [
   {
    "file": "M_app_latest.hex",
@@ -19,11 +19,11 @@
    "target": "S",
    "targetName": "蓝牙板 S",
    "title": "S_app_latest",
-   "size": 42528,
-   "fileSize": 42528,
-   "sha256": "5dee391d16174d18106cee5d47986ccb65da20372cafea186ae186e2e41010b1",
+   "size": 42696,
+   "fileSize": 42696,
+   "sha256": "173a2f1e69125348b2e267630ddd8fa7f9a82a1e181063358f30eb75dae0930a",
    "version": "",
-   "mtime": 1794882298.0941105
+   "mtime": 1794883129.1794407
   }
  ]
 }
