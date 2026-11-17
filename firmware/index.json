@@ -1,29 +1,26 @@
 {
- "updated": 1794883896,
+ "updated": 1794887977,
  "items": [
   {
+   "file": "M_app_latest.bin",
+   "size": 100400,
+   "fileSize": 100400,
+   "sha256": "8ef7027cf2764a0399e3b5ad864a999bbca2256c921c157c3cdf9f0ab32bf917",
+   "mtime": 1794887285.1858609
+  },
+  {
    "file": "M_app_latest.hex",
-   "role": "app",
-   "target": "M",
-   "targetName": "主控 M",
-   "title": "M_app_latest",
-   "size": 99888,
-   "fileSize": 281003,
-   "sha256": "2d8cb8018eef8451188dbbbc1d3e739dc543d242ef20ea9fba5abe81ffaf0294",
-   "version": "",
-   "mtime": 1794877760.6344512
+   "size": 276144,
+   "fileSize": 276144,
+   "sha256": "9dba1b007b8eaf6534956bfd009188b33e22019b166884a72974c69f8ac8d38f",
+   "mtime": 1794887977.4058487
   },
   {
    "file": "S_app_latest.bin",
-   "role": "app",
-   "target": "S",
-   "targetName": "蓝牙板 S",
-   "title": "S_app_latest",
-   "size": 42700,
-   "fileSize": 42700,
-   "sha256": "44c1024a249ecdf8c6766c783eac5541af72d69821069fc996b6d9e474ba61eb",
-   "version": "",
-   "mtime": 1794883891.524758
+   "size": 43252,
+   "fileSize": 43252,
+   "sha256": "90020c87fcc0c2b694b5b979ad99f177eea0223a5a2df12a34df447bb099a068",
+   "mtime": 1794887916.4618964
   }
  ]
 }
