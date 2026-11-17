@@ -153,6 +153,15 @@ class SessionTests(unittest.TestCase):
         self.assertFalse(self.session.snapshot()['connected'])
         self.assertIsNone(task['future'])
 
+    def test_status_timeout_preserves_live_gatt_connection(self):
+        with patch.object(ota_ble_s.BootS, 'query_status', AsyncMock(return_value=None)):
+            state=self.session.call('connect')
+            self.assertTrue(state['connected'])
+            self.assertIsNone(state['status'])
+            state=self.session.call('probe')
+            self.assertTrue(state['connected'])
+            self.assertIsNone(state['status'])
+
     def test_failed_ota_disconnects(self):
         self.session.call('connect')
         with patch.object(ota_ble_s,'run',AsyncMock(return_value=False)):

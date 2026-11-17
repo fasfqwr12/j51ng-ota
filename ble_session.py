@@ -89,7 +89,12 @@ class NativeBleSession:
                 self.log(str(exc))
                 return self._publish(clear_status=True)
         if operation == "probe":
-            return await self._query()
+            try:
+                return await self._query()
+            except TimeoutError as exc:
+                # A read-only status miss must not discard an otherwise-live GATT owner.
+                self.log(str(exc))
+                return self._publish(clear_status=True)
         if operation == "ota":
             import ota_ble_s
             host.inbox.clear()
