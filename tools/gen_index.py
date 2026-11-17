@@ -159,7 +159,7 @@ def main():
             title = "%s %s" % (model, "APP" if role == "app" else "BOOT")
             if meta:
                 title += " %s" % meta["verText"]
-                title += " crc=%s" % meta["appCrc"]
+                title += " crc=0x%08X" % meta["appCrc"]
         items.append({
             "file": fn,
             "role": role,

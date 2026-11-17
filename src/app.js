@@ -446,6 +446,7 @@ function applyStatus(st){
     : `APP 模式 · ${st.versionText || `v${(st.fwVersion>>8)&0xFF}.${st.fwVersion&0xFF}`}`;
   if(st.resetPend) log("    设备已排定复位（升级交班中）","dim");
   if(st.metaValid && !st.hcrcOk) log("    ⚠ 设备镜像头自校验不通过","err");
+  __cmp.dev = st; renderCompare();
 }
 
 /* 发一次握手并等应答（唯一允许改变设备模式的调用） */
@@ -638,6 +639,57 @@ function showMeta(meta, fwLen){
   }
 }
 
+/* ---------------- 版本对照（板上当前 vs 升级目标，左右布局） ----------------
+ * 左侧：最近一次状态应答（S 板自报，schema 2）；右侧：当前选中的固件元数据。
+ * 结论按 型号+代码区CRC 判定；M 文件不是 BLE 板的升级目标，如实提示而不是误报。 */
+const __cmp = { dev: null, img: null, fileName: "" };
+function renderCompare(){
+  const el = $("cmpDev"), elR = $("cmpImg"), vd = $("cmpVerdict"), tail = $("tailCmp");
+  if(!el || !elR || !vd) return;
+  const d = __cmp.dev, m = __cmp.img;
+  const fmt = st => st ? `${st.model||"?"} ${st.mode==="boot"?"(Boot)":"(APP)"} · ${st.versionText||"?"}` : "";
+  /* 左：板上 */
+  el.innerHTML = d
+    ? `<div class="cl">设备侧 · 当前</div>
+       <div class="cv">${d.model ? `${d.model} (${d.deviceId})` : "旧固件（型号未知）"}</div>
+       <div class="cx">${d.versionText||"—"}</div>
+       <div class="cm">${d.metaValid?"元数据合法":"⚠ 镜像头校验失败"} · ${d.mode==="boot"?"Boot 模式（可直升）":"APP 模式"}</div>`
+    : `<div class="cl">设备侧 · 当前</div><div class="cv">—</div><div class="cm">未读状态：连接蓝牙后点「读状态」</div>`;
+  /* 右：升级目标 */
+  elR.innerHTML = m
+    ? `<div class="cl">升级目标 · ${__cmp.fileName||"所选文件"}</div>
+       <div class="cv">${m.model||"?"} ${m.imageType===0?"APP":"BOOT"} ${m.verText}</div>
+       <div class="cx">crc=0x${h(m.payloadCrc)} · 代码区 ${m.size} B · vt+0x${m.vtOff.toString(16)}</div>
+       <div class="cm">目标位 ${m.target===1?"S 蓝牙板":"M 主控"}</div>`
+    : `<div class="cl">升级目标</div><div class="cv">—</div><div class="cm">未选择固件：从在线固件库或本地拖入</div>`;
+  /* 结论 */
+  if(!m){ vd.textContent=""; vd.className="cmpverdict"; if(tail) tail.textContent="待数据"; return; }
+  const tgtM = m.model.toUpperCase().includes("_M");
+  let txt, cls="";
+  if(d && !d.model){
+    txt = "设备是旧固件（无型号自报），目标 "+(m.model||"?")+"；升级后设备会自报型号。";
+  } else if(tgtM){
+    txt = "该文件是 M 主控的 APP，不是 BLE 板 S 的升级目标：目标选 M 时由 S 透传给主控，"
+        + " 主控当前版本无只读通道，升级结果以下方日志的 CRC 校验行为准。";
+    cls="dim";
+  } else {
+    const sameCrc = d && (d.payloadCrc>>>0)===(m.payloadCrc>>>0);
+    if(sameCrc){
+      txt = "S 板上已是该版本（crc=0x"+h(m.payloadCrc)+"），无需再刷 S。";
+      cls="ok";
+    } else if(d && d.payloadCrc){
+      txt = "S 可升级：0x"+h(d.payloadCrc)+" → 0x"+h(m.payloadCrc)+"。";
+      cls="st";
+    } else {
+      txt = "S 目标版本已就绪（板上状态未读到，无法比对 CRC）。";
+      cls="dim";
+    }
+  }
+  vd.textContent = txt;
+  vd.className = "cmpverdict"+(cls?" "+cls:"");
+  if(tail) tail.textContent = m ? (tgtM ? "对照：S 现状 vs M 目标" : "对照：S 现状 vs S 目标") : "待数据";
+}
+
 /* ---------------- 只读状态查询（0x0610 -> 0x0612） ----------------
  * 唯一允许的状态查询：不改设备、不握手、不复位。
  * schema 1 = 32B（旧）；schema 2 = 48B，追加型号/机器身份/元数据格式版本。
@@ -727,6 +779,7 @@ async function loadFile(f){
     $("kSha").textContent=[...sha].map(b=>b.toString(16).padStart(2,"0")).join("");
     const j5=parseMeta(fw);
     window.__j5aa=j5;                 /* 供升级流程比对版本 */
+    __cmp.img=j5; __cmp.fileName=f.name; renderCompare();
     showMeta(j5, fw.length);
     $("tailFw").textContent=f.name;
     $("drop").classList.add("has");
