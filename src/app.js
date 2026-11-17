@@ -622,20 +622,21 @@ function showMeta(meta, fwLen){
     return;
   }
   const kind = meta.imageType === 0 ? "APP" : "BOOT";
-  const chip = meta.target === 1 ? "N32" : "W515";
-  const txt = `${kind} · ${chip} · v${meta.verText} · ${meta.model || "?"}`
-            + ` · size ${meta.size} · crc ${meta.payloadCrc.toString(16).padStart(8,"0").toUpperCase()}`
+  const tgt = meta.target === 1 ? "S 蓝牙板" : meta.target === 2 ? "M 主控" : "?";
+  const txt = `${kind} · ${meta.model || "?"} → ${tgt} · v${meta.verText}`
+            + ` · 代码区 ${meta.size} B · crc ${meta.payloadCrc.toString(16).padStart(8,"0").toUpperCase()}`
             + (meta.hcrcOk ? "" : " · ⚠头CRC坏");
   if(el) el.textContent = txt;
-  log(`元数据块: ${kind} target=${chip} fw=v${meta.verText} hw=0x${meta.hwVersion.toString(16)}`
-     + ` base=0x${meta.base.toString(16).padStart(8,"0")} size=${meta.size}`
+  log(`元数据块: ${kind} model="${meta.model}" → ${tgt} fw=v${meta.verText} hw=0x${meta.hwVersion.toString(16)}`
+     + ` base=0x${meta.base.toString(16).padStart(8,"0")} 代码区=${meta.size} B`
      + ` payload_crc=0x${meta.payloadCrc.toString(16).padStart(8,"0").toUpperCase()}`
-     + ` model="${meta.model}"`, meta.hcrcOk ? "dim" : "err");
+     + `（头 ${meta.vtOff} B + 代码区 ${meta.size} B = ${meta.vtOff + meta.size} B）`, meta.hcrcOk ? "dim" : "err");
   if(!meta.hcrcOk){
     log(`⚠ header_crc32 校验失败: 存 0x${meta.hcrcStored.toString(16)} / 算 0x${meta.hcrcCalc.toString(16)}`,"err");
   }
-  if(meta.size !== fwLen){
-    log(`⚠ 头里 payload_size=${meta.size} 与实际文件 ${fwLen} B 不一致`,"err");
+  /* 新元数据方案：文件 = 头区(vtOff) + 代码区(size)；对不上才告警 */
+  if(meta.vtOff + meta.size !== fwLen){
+    log(`⚠ 头 ${meta.vtOff} B + 代码区 ${meta.size} B ≠ 实际文件 ${fwLen} B`,"err");
   }
 }
 
