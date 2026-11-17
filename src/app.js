@@ -865,7 +865,11 @@ async function useLibItem(it, btn){
     const __d=new Date((it.mtime||0)*1000), __p2=n=>String(n).padStart(2,"0");
     const __ts=it.mtime?`${__d.getFullYear()}-${__p2(__d.getMonth()+1)}-${__p2(__d.getDate())} ${__p2(__d.getHours())}:${__p2(__d.getMinutes())}`:"—";
     refreshGo();
-    log(`已选用 ${it.title}（${it.targetName}）· ${it.size} B · 生成于 ${__ts}`,"ok");
+    /* 以实际下载并解析出的 meta 为准，避免库 index 落后于最新构建 */
+    const lm = window.__j5aa;
+    log(`已选用 ${it.title}（${it.targetName}）· ${fw?fw.length:it.size} B`
+      + (lm ? ` · crc=0x${h(lm.payloadCrc)}（实际文件）` : "")
+      + ` · 生成于 ${__ts}`,"ok");
   }catch(e){
     log("下载失败："+e.message,"err");
   }finally{
