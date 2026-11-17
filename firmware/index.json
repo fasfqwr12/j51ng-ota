@@ -1,33 +1,33 @@
 {
-  "updated": 1794900882,
+  "updated": 1794902189,
   "items": [
     {
       "file": "M_app_latest.bin",
       "role": "app",
       "target": "M",
       "targetName": "主控 M",
-      "title": "N2SE_M APP v6.255 crc=0xFCABC797",
-      "size": 100456,
-      "fileSize": 100456,
-      "sha256": "799ea6002b5643f277597ff2255004ce58c18829797fc0e96cbb4c2e56bedaca",
+      "title": "N2SE_M APP v6.255 crc=0x45793DD9",
+      "size": 101140,
+      "fileSize": 101140,
+      "sha256": "fbbd80afa3ab0f0b38a9df37fdd60377ea27337a178c2e8a8a6cc1e6d9689963",
       "version": "v6.255",
       "model": "N2SE_M",
-      "appCrc": "0xFCABC797",
-      "mtime": 1794900882.1949813
+      "appCrc": "0x45793DD9",
+      "mtime": 1794902145.8499458
     },
     {
       "file": "M_app_latest.hex",
       "role": "app",
       "target": "M",
       "targetName": "主控 M",
-      "title": "N2SE_M APP v6.255 crc=0xFCABC797",
-      "size": 100456,
-      "fileSize": 276304,
-      "sha256": "bcd278329c5f84dc1f998539c9ca0c7dd027d0a5d598413c8e26d7ebb1b03594",
+      "title": "N2SE_M APP v6.255 crc=0x45793DD9",
+      "size": 101140,
+      "fileSize": 278188,
+      "sha256": "c650baaea86337e9d04cb1bed07be066adeedd93d03ce3e12c64e7363ce7491f",
       "version": "v6.255",
       "model": "N2SE_M",
-      "appCrc": "0xFCABC797",
-      "mtime": 1794900882.2049518
+      "appCrc": "0x45793DD9",
+      "mtime": 1794902145.859318
     },
     {
       "file": "S_app_latest.bin",
