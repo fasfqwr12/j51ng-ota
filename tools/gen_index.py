@@ -46,7 +46,7 @@ def hex_image_size(path):
 
 # ---------- 镜像元数据块（与 app.js metaAt / image_header.h v2 一致） ----------
 META_MAGIC, META_END, META_MIN, META_MAX, META_FMT, META_CRC_SPAN = (
-    0x4D455441, 0x4154454D, 0x34, 0x100, 2, 0x2C)
+    0x4154454D, 0x4D455441, 0x34, 0x100, 2, 0x2C)  # 与 app.js 常量一致：块首字节"MET A"、末4字节"ATEM"按小端读
 _CRC_TAB = None
 
 def _crc32(data):
@@ -149,14 +149,17 @@ def main():
         role = "boot" if "boot" in fn.lower() else "app"
         meta = meta_of_file(path, fn)
         model = meta["model"] if meta else ""
-        # 型号优先于文件名猜的目标：镜像自描述
-        if meta and meta.get("target") in (1, 2):
-            target = {1: "M", 2: "S"}.get(meta["target"], target)
+        # 型号是权威自描述字段（上位机不关心 target 数值约定）：N2SE_M→M，N2SE_S→S
+        if model.upper().endswith("_M"):
+            target = "M"
+        elif model.upper().endswith("_S"):
+            target = "S"
         title = os.path.splitext(fn)[0]
         if model:
             title = "%s %s" % (model, "APP" if role == "app" else "BOOT")
             if meta:
                 title += " %s" % meta["verText"]
+                title += " crc=%s" % meta["appCrc"]
         items.append({
             "file": fn,
             "role": role,
