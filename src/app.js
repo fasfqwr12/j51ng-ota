@@ -13,6 +13,12 @@ const T = { HS:0x0101, HSR:0x0102, PM:0x0201, PMR:0x0202, DT:0x0301, ACK:0x0302,
 
 const $ = id => document.getElementById(id);
 const sleep = ms => new Promise(r => setTimeout(r, ms));
+/* S APP 失败码（0x30-0x3F）与 M/Boot 既有码的中文名，只用于报错文案。 */
+const NACK_TEXT={0x01:"CRC错误",0x02:"Flash错误",0x10:"长度错误",0x11:"校验失败",
+  0x30:"S通知队列满",0x31:"S通知确认失败",0x32:"M串口未就绪",0x33:"M串口写失败",
+  0x34:"M串口帧错误",0x35:"M未就绪超时",0x36:"M进Boot超时",0x37:"S数据静默5s",
+  0x38:"M拒绝数据包",0xE1:"硬件码不匹配",0xFF:"未分类错误"};
+const nackText=c=>NACK_TEXT[c]||"未知状态";
 
 let device=null, server=null, chW=null, chN=null;
 let frames=[], running=false, abort=false, target="M", fw=null;
@@ -973,7 +979,7 @@ async function startUpgrade(){
         const code=f.p[0], seq=rd16(f.p,1);
         if(f.t===T.ACK && code===0 && seq+1<=sent && seq+1>acked){ acked=seq+1; moved=true; }
         else if(f.t===T.NACK){
-          if(code!==0x10 || seq>sent) throw new Error(`设备拒绝数据：状态 0x${code.toString(16).padStart(2,"0")}，seq=${seq}`);
+          if(code!==0x10 || seq>sent) throw new Error(`设备拒绝数据：${nackText(code)}（0x${code.toString(16).padStart(2,"0")}），seq=${seq}`);
           rtx++; acked=seq; sent=seq; moved=true;
           frames=frames.filter(x=>x.t!==T.ACK && x.t!==T.NACK);
           log(`    NACK 0x10，回到 seq=${seq} 重传`,"dim");
