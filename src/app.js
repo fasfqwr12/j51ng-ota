@@ -512,7 +512,7 @@ function appFrame(cmd, payload){
   return f;
 }
 
-/* 读设备当前运行镜像的 J5AA 头（命令 0xFE，回 48B 原始头） */
+/* 读设备当前运行镜像的元数据块（命令 0xFE） */
 async function readDeviceMeta(ms=3000){
   __metaQ = __metaQ.filter(x=>x.cmd!==0xFE);
   const f = appFrame(0xFE, null);
@@ -526,21 +526,24 @@ async function readDeviceMeta(ms=3000){
     if(i>=0){
       const pl=__metaQ.splice(i,1)[0].p;
       if(pl.length < 48) return {none:true};      /* 旧镜像，无头 */
-      return parseJ5AA(pl, 0);
+      return parseMeta(pl, 0);
     }
     await sleep(30);
   }
   return null;
 }
 
-/* ---------------- J5AA 镜像头（单一事实源，只读不算） ----------------
- * 规范: 01_docs/IMAGE_HEADER_SPEC → 48B @ image+0x200, 小端
- * 0x00 magic "J5AA"  0x04 header_ver  0x06 image_type(0=APP 1=BOOT)
- * 0x07 target(0=W515 1=N32)  0x08 fw_version  0x0A hw_version
- * 0x0C payload_size  0x10 payload_crc32  0x14 payload_base
- * 0x18 flags  0x1C min_boot_ver  0x1E reserved  0x20 model[12]  0x2C header_crc32
+/* ---------------- 镜像元数据块（自描述，扫标记定位） ----------------
+ * 上位机不知道偏移、不知道型号：扫 "META"，用 "ATEM" + 块 CRC 确认命中。
+ * 布局与 shared/image_header.h 一致（v2）：
+ * 0x00 META  0x04 size  0x06 fmt  0x08 model[12]  0x14 app_crc
+ * 0x18 img_size  0x1C load_addr  0x20 fw_ver  0x22 hw_ver
+ * 0x24 vt_off  0x26 img_type  0x27 target  0x28 build_time
+ * 0x2C blk_crc  0x30 ATEM
  */
-const J5AA_OFF = 0x200, J5AA_SIZE = 48, J5AA_MAGIC = 0x4141354A;
+const META_MAGIC = 0x4154454D, META_END = 0x4D455441;
+const META_MIN = 0x34, META_MAX = 0x100, META_CRC_SPAN = 0x2C;
+const META_FMT = 2;
 
 let __crcTab = null;
 function crc32(u8){
@@ -557,41 +560,61 @@ function crc32(u8){
   return (crc ^ 0xFFFFFFFF) >>> 0;
 }
 
-function parseJ5AA(buf, off){
-  off = (off===undefined) ? J5AA_OFF : off;
-  if(!buf || buf.length < off + J5AA_SIZE) return null;
+/* 在任意偏移处校验一个候选块；不合法返回 null。 */
+function metaAt(buf, off){
+  if(off < 0 || off + META_MIN > buf.length) return null;
   const dv = new DataView(buf.buffer, buf.byteOffset, buf.byteLength);
-  if(dv.getUint32(off, true) !== J5AA_MAGIC) return null;
-  const hcrcStored = dv.getUint32(off + 0x2C, true);
-  const hcrcCalc   = crc32(buf.subarray(off, off + 0x2C));
+  const size = dv.getUint16(off + 0x04, true);
+  if(size < META_MIN || size > META_MAX || off + size > buf.length) return null;
+  if(dv.getUint16(off + 0x06, true) !== META_FMT) return null;
+  if(dv.getUint32(off + 0x30, true) !== META_END) return null;
+  const stored = dv.getUint32(off + 0x2C, true);
+  if(crc32(buf.subarray(off, off + META_CRC_SPAN)) !== stored) return null;
+
   const model = [];
   for(let i=0;i<12;i++){
-    const b = buf[off + 0x20 + i];
+    const b = buf[off + 0x08 + i];
     if(!b) break;
     model.push(String.fromCharCode(b));
   }
-  const fwv = dv.getUint16(off + 0x08, true);
+  const fwv = dv.getUint16(off + 0x20, true);
   return {
-    headerVer : dv.getUint16(off + 0x04, true),
-    imageType : buf[off + 0x06],
-    target    : buf[off + 0x07],
+    offset    : off,
+    blockSize : size,
+    imageType : buf[off + 0x26],
+    target    : buf[off + 0x27],
     fwVersion : fwv,
     verText   : ((fwv>>8)&0xFF) + "." + (fwv&0xFF),
-    hwVersion : dv.getUint16(off + 0x0A, true),
-    size      : dv.getUint32(off + 0x0C, true),
-    payloadCrc: dv.getUint32(off + 0x10, true),
-    base      : dv.getUint32(off + 0x14, true),
+    hwVersion : dv.getUint16(off + 0x22, true),
+    size      : dv.getUint32(off + 0x18, true),   /* 代码区长度 */
+    payloadCrc: dv.getUint32(off + 0x14, true),   /* app_crc     */
+    base      : dv.getUint32(off + 0x1C, true),
+    vtOff     : dv.getUint16(off + 0x24, true),
+    buildTime : dv.getUint32(off + 0x28, true),
     model     : model.join(""),
-    hcrcStored, hcrcCalc,
-    hcrcOk    : hcrcStored === hcrcCalc
+    blkCrc    : stored,
+    hcrcStored: stored, hcrcCalc: stored,
+    hcrcOk    : true
   };
 }
 
-/* 把 J5AA 头显示到界面 + 打印日志 */
-function showJ5AA(meta, fwLen){
+/* 扫描整个镜像找块。找不到返回 null（旧格式）。 */
+function parseMeta(buf){
+  if(!buf || buf.length < META_MIN) return null;
+  const dv = new DataView(buf.buffer, buf.byteOffset, buf.byteLength);
+  for(let off=0; off + META_MIN <= buf.length; off++){
+    if(dv.getUint32(off, true) !== META_MAGIC) continue;
+    const m = metaAt(buf, off);
+    if(m) return m;
+  }
+  return null;
+}
+
+/* 把元数据块显示到界面 + 打印日志 */
+function showMeta(meta, fwLen){
   const el = $("kMeta");
   if(!meta){
-    if(el) el.textContent = "—（无 J5AA 头，旧格式镜像）";
+    if(el) el.textContent = "—（无元数据块，旧格式镜像）";
     return;
   }
   const kind = meta.imageType === 0 ? "APP" : "BOOT";
@@ -600,7 +623,7 @@ function showJ5AA(meta, fwLen){
             + ` · size ${meta.size} · crc ${meta.payloadCrc.toString(16).padStart(8,"0").toUpperCase()}`
             + (meta.hcrcOk ? "" : " · ⚠头CRC坏");
   if(el) el.textContent = txt;
-  log(`J5AA 头: ${kind} target=${chip} fw=v${meta.verText} hw=0x${meta.hwVersion.toString(16)}`
+  log(`元数据块: ${kind} target=${chip} fw=v${meta.verText} hw=0x${meta.hwVersion.toString(16)}`
      + ` base=0x${meta.base.toString(16).padStart(8,"0")} size=${meta.size}`
      + ` payload_crc=0x${meta.payloadCrc.toString(16).padStart(8,"0").toUpperCase()}`
      + ` model="${meta.model}"`, meta.hcrcOk ? "dim" : "err");
@@ -651,33 +674,20 @@ async function queryStatus(ms=1000, retry=1){
 }
 
 /* ---------------- 本地镜像闸门（先验，有副作用动作之前） ----------------
- * S 镜像必须带 J5AA 头且自洽；M 镜像按约定不带头，只做尺寸检查。
- * payload_crc32 口径：整镜像去掉 [0x200,0x230) 这段头块。 */
-function crc32Image(img){
-  const a=img.subarray(0, J5AA_OFF), b=img.subarray(J5AA_OFF + J5AA_SIZE);
-  const buf=new Uint8Array(a.length + b.length);
-  buf.set(a,0); buf.set(b,a.length);
-  return crc32(buf);
-}
+ * 元数据由构建脚本写进镜像；上位机只读不算：app_crc 直接来自块，
+ * 任何偏移、型号、加载地址都不在这里出现。 */
 function validateLocalImage(img, target){
   if(!img || !img.length) throw new Error("固件为空");
-  if(target !== "S") return null;                 /* M/R 镜像无 J5AA 头 */
-  const j = parseJ5AA(img);
-  if(!j) throw new Error("镜像缺少 J5AA 头（需 48B @0x200）：请确认选的是 APP 镜像而不是裸 bin/旧版 hex");
-  /* Keil 原始输出（Objects/sapp.hex）里 J5AA 头是占位块：size/crc/hcrc 全为 0，
-   * 真正可升级的镜像是后处理脚本 post_build_crc.py 生成的 S_app_latest.bin。 */
-  if(!j.hcrcOk && j.size === 0 && j.payloadCrc === 0 && j.hcrcStored === 0)
-    throw new Error("这是 Keil 原始输出（头部未填充：size/crc/hcrc 全为 0），不能直接升级；"
-      + "请改用 post_build_crc.py 生成的 firmware/S_app_latest.bin，或直接在下方「在线固件库」点 S_app_latest 的「选用」");
-  if(!j.hcrcOk) throw new Error(`镜像头 CRC 不符（存 0x${h(j.hcrcStored)} / 算 0x${h(j.hcrcCalc)}），文件已损坏`);
-  if(j.imageType !== 0) throw new Error("这不是 APP 镜像（image_type=" + j.imageType + "）");
-  if(j.target !== 1) throw new Error("镜像目标不是 N32 蓝牙板");
-  if(j.size !== img.length)
-    throw new Error(`镜像头声明 ${j.size} B，实际文件 ${img.length} B，不一致`);
-  const calc = crc32Image(img);
-  if(calc !== j.payloadCrc)
-    throw new Error(`镜像内容 CRC 不符（头 0x${h(j.payloadCrc)} / 实算 0x${h(calc)}）`);
-  return j;
+  const m = parseMeta(img);
+  if(!m) throw new Error("镜像里没有元数据块（META/ATEM）：请使用构建脚本生成的 "
+    + "M_app_latest.bin / S_app_latest.bin，而不是裸 hex 或旧版镜像");
+  if(m.imageType !== 0) throw new Error("这不是 APP 镜像（image_type=" + m.imageType + "）");
+  if(target === "S" && m.target !== 1) throw new Error("镜像目标不是 N32 蓝牙板");
+  if(target === "M" && m.target !== 2) throw new Error("镜像目标不是 GD32 主控");
+  /* 代码区长度 + 头 = 整个文件 */
+  if(m.vtOff + m.size !== img.length)
+    throw new Error(`镜像声明代码 ${m.size} B（头 ${m.vtOff} B），实际文件 ${img.length} B，不一致`);
+  return m;
 }
 const h = v => (v>>>0).toString(16).padStart(8,"0").toUpperCase();
 
@@ -693,9 +703,9 @@ async function loadFile(f){
     const sha=await sha256(fw);
     $("kSize").textContent=fw.length.toLocaleString()+" B";
     $("kSha").textContent=[...sha].map(b=>b.toString(16).padStart(2,"0")).join("");
-    const j5=parseJ5AA(fw);
+    const j5=parseMeta(fw);
     window.__j5aa=j5;                 /* 供升级流程比对版本 */
-    showJ5AA(j5, fw.length);
+    showMeta(j5, fw.length);
     $("tailFw").textContent=f.name;
     $("drop").classList.add("has");
     $("drop").innerHTML=`<div class="t">${f.name}</div><div class="h">${fw.length.toLocaleString()} B · 点击可更换</div>`;
@@ -859,7 +869,7 @@ async function startUpgrade(){
     /* ★ 本地闸门先跑：镜像不自洽就直接停，绝不先碰设备 */
     if(target === "S"){
       const j = validateLocalImage(img, target);
-      log(`本地校验通过：J5AA v${j.verText} · ${j.size} B · crc ${h(j.payloadCrc)}`,"dim");
+      log(`本地校验通过：${j.model} · ${j.size} B · crc ${h(j.payloadCrc)}`,"dim");
     }
 
     /* ★ 第一步只用只读查询识别模式，不握手、不复位、不发 M 命令 */
@@ -1079,7 +1089,7 @@ async function startUpgrade(){
 /* 版本确认：只读查询设备当前运行的镜像身份，与刚下发的逐字段比对。
  * 只有 APP 模式 + size/payload_crc 都对上，才算真的升级成功。 */
 async function confirmRunningImage(img, tag){
-  const sent = parseJ5AA(img);
+  const sent = parseMeta(img);
   const st = await queryStatus(1500, 1);
   if(!st){
     log(`[7] ⚠ 版本未确认（${tag}）：设备对只读查询无应答`,"err");
@@ -1091,7 +1101,7 @@ async function confirmRunningImage(img, tag){
     return false;
   }
   if(!st.metaValid){
-    log(`[7] ⚠ 版本未确认（${tag}）：设备没有 J5AA 头（旧镜像）`,"err");
+    log(`[7] ⚠ 版本未确认（${tag}）：设备没有元数据块（旧镜像）`,"err");
     chip("版本未确认","");
     return false;
   }
@@ -1297,7 +1307,7 @@ if(!LOCAL_API && !navigator.bluetooth){
 /* ---------------- 对外 API（便于自动化/联调） ---------------- */
 window.ota = {
   /* 调试/自检入口：镜像头解析与设备回读 */
-  parseJ5AA(buf, off){ return parseJ5AA(buf, off); },
+  parseMeta(buf, off){ return parseMeta(buf, off); },
   appFrame(cmd, payload){ return appFrame(cmd, payload); },
   readMeta(){ return readDeviceMeta(3000); },
   sentMeta(){ return window.__j5aa || null; },
@@ -1481,6 +1491,6 @@ window.ota = {
       d.addEventListener("gattserverdisconnected", onDisconnect);
     },
     reset(){ __cancelled=false; __userDisc=false; __devDisc=false; server=null; chW=null; chN=null; },
-    queryStatus, validateLocalImage, crc32Image, parseStatus
+    queryStatus, validateLocalImage, parseMeta, parseStatus
   }
 };
