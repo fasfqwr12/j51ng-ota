@@ -282,15 +282,17 @@ class Handler(SimpleHTTPRequestHandler):
         global _task, _link_busy
         u = urlparse(self.path)
         q = parse_qs(u.query)
-        if u.path in ("/api/connect", "/api/disconnect", "/api/probe"):
+        if u.path in ("/api/connect", "/api/disconnect", "/api/probe", "/api/fault"):
             with _lock:
                 if _state["running"] or _link_busy:
                     return self._json({"ok": False, "err": "蓝牙正在处理其它操作"}, 409)
                 _link_busy = True
             try:
                 operation = u.path.rsplit("/", 1)[1]
-                ble = native_session().call(operation, timeout=40)
-                return self._json({"ok": True, "ble": ble})
+                result = native_session().call(operation, timeout=40)
+                if operation == "fault":
+                    return self._json({"ok": True, "fault": result})
+                return self._json({"ok": True, "ble": result})
             except Exception as exc:
                 log(str(exc), "err")
                 return self._json({"ok": False, "err": str(exc),

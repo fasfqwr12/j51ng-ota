@@ -95,6 +95,19 @@ class NativeBleSession:
                 # A read-only status miss must not discard an otherwise-live GATT owner.
                 self.log(str(exc))
                 return self._publish(clear_status=True)
+        if operation == "fault":
+            import ota_ble_s
+            if not host.client or not host.client.is_connected:
+                raise ConnectionError("蓝牙未连接，请先连接设备")
+            payload = await ota_ble_s.BootS(host).request(0x0614, b"", 0x0615, 2.0)
+            if payload is None or len(payload) < 16:
+                raise TimeoutError("故障快照无应答（设备可能未运行带快照的固件）")
+            return {"last_fail": payload[0], "phase": payload[1], "target": payload[2],
+                    "m_state": payload[3], "uart_err": payload[4], "m_fwd": payload[5],
+                    "seq": (payload[6] << 8) | payload[7],
+                    "m_ack": (payload[8] << 24) | (payload[9] << 16) | (payload[10] << 8) | payload[11],
+                    "tx_queued": payload[12], "tx_sent": payload[13],
+                    "tx_cfm_err": payload[14], "tx_drop": payload[15]}
         if operation == "ota":
             import ota_ble_s
             host.inbox.clear()
@@ -163,7 +176,10 @@ class NativeBleSession:
         future = self.start(operation, **kwargs)
         try:
             result = future.result(timeout)
-            return self.snapshot() if isinstance(result, dict) else result
+            # Link operations answer with the session snapshot; queries keep their own payload.
+            if operation in ("connect", "probe", "disconnect"):
+                return self.snapshot()
+            return result
         except concurrent.futures.TimeoutError:
             if future.done():
                 raise
