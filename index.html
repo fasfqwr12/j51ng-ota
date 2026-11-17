@@ -8,7 +8,7 @@
 <link rel="manifest" href="./manifest.webmanifest">
 <link rel="icon" type="image/svg+xml" href="./assets/icon.svg">
 <link rel="apple-touch-icon" href="./assets/icon-192.png">
-<link rel="stylesheet" href="./src/app.css?v=42">
+<link rel="stylesheet" href="./src/app.css?v=43">
 </head>
 <body>
 
@@ -50,7 +50,16 @@
   </div>
 
   <div class="card">
-    <div class="sec"><span class="n">2</span><h2>固件</h2><span class="tail" id="tailFw">未选择</span></div>
+    <div class="sec"><span class="n">2</span><h2>版本对照</h2><span class="tail" id="tailCmp">待数据</span></div>
+    <div class="cmp">
+      <div class="cmpcol" id="cmpDev"></div>
+      <div class="cmpcol" id="cmpImg"></div>
+    </div>
+    <div class="cmpverdict" id="cmpVerdict"></div>
+  </div>
+
+  <div class="card">
+    <div class="sec"><span class="n">3</span><h2>固件</h2><span class="tail" id="tailFw">未选择</span></div>
     <div class="drop" id="drop">
       <div class="t">点击选择或拖入固件</div>
       <div class="h">支持 .bin / .hex，HEX 自动解析基址</div>
@@ -65,14 +74,14 @@
   </div>
 
   <div class="card">
-    <div class="sec"><span class="n">3</span><h2>在线固件库</h2>
+    <div class="sec"><span class="n">4</span><h2>在线固件库</h2>
       <span class="tail"><button id="btnLib" style="padding:4px 9px;font-size:11.5px">刷新</button></span></div>
     <div class="lib" id="lib"><div class="hint">加载中…</div></div>
     <div class="hint">固件放在仓库 <b>firmware/</b> 目录；新增后跑 <span style="font-family:var(--mono)">python tools/gen_index.py</span> 再 push。</div>
   </div>
 
   <div class="card">
-    <div class="sec"><span class="n">4</span><h2>目标</h2><span class="tail" id="tailTarget">主控 M</span></div>
+    <div class="sec"><span class="n">5</span><h2>目标</h2><span class="tail" id="tailTarget">主控 M</span></div>
     <div class="seg" id="seg">
       <button data-t="M" class="on">主控 M</button>
       <button data-t="S">蓝牙板 S</button>
@@ -81,7 +90,7 @@
   </div>
 
   <div class="card">
-    <div class="sec"><span class="n">5</span><h2>进度</h2><span class="tail" id="tailStage">待开始</span></div>
+    <div class="sec"><span class="n">6</span><h2>进度</h2><span class="tail" id="tailStage">待开始</span></div>
     <div class="bar"><i id="bar"></i></div>
     <div class="stats">
       <div class="stat"><b id="sPct">0%</b><span>进度</span></div>
@@ -98,12 +107,12 @@
   </div>
 
   <div class="card">
-    <div class="sec"><span class="n">6</span><h2>日志</h2><span class="tail"><button id="btnClr" style="padding:4px 9px;font-size:11.5px">清空</button></span></div>
+    <div class="sec"><span class="n">7</span><h2>日志</h2><span class="tail"><button id="btnClr" style="padding:4px 9px;font-size:11.5px">清空</button></span></div>
     <div class="log" id="log"></div>
   </div>
 
   <div class="card">
-    <div class="sec"><span class="n">7</span><h2>外观</h2></div>
+    <div class="sec"><span class="n">8</span><h2>外观</h2></div>
     <div class="themes" id="themes">
       <button data-th="olive"    style="background:#6b7d4f" title="卡其·军绿"></button>
       <button data-th="light"    style="background:#1f5eff" title="亮白·深蓝"></button>
@@ -128,7 +137,7 @@
   </div>
 </div>
 
-<script type="module" src="./src/app.js?v=74"></script>
+<script type="module" src="./src/app.js?v=75"></script>
 <script src="./api-live.js?v=4"></script>
 </body>
 </html>
