@@ -1,12 +1,12 @@
 {
- "updated": 1794889433,
+ "updated": 1794890850,
  "items": [
   {
    "file": "M_app_latest.bin",
    "size": 100400,
    "fileSize": 100400,
-   "sha256": "732912432eb35e088b399a925945d9599e7864ccac9afb487fd104c5f97a7942",
-   "mtime": 1794888954.1134005
+   "sha256": "2d934e16f79b89fbcd49a433554616d8d56a9c6da32677e9bbd42f67eff00989",
+   "mtime": 1794890307.7808392
   },
   {
    "file": "M_app_latest.hex",
@@ -19,8 +19,8 @@
    "file": "S_app_latest.bin",
    "size": 43316,
    "fileSize": 43316,
-   "sha256": "be0b78553024987d467678d46ab8cf4f83ccaf0c0ecb23950078f0c9251cf2a1",
-   "mtime": 1794889426.6077247
+   "sha256": "59beaf75472e48f0aa36b5fe28031d1213a55a9014db270b633060afaea23953",
+   "mtime": 1794890840.8526175
   }
  ]
 }
