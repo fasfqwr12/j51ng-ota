@@ -1,5 +1,6 @@
 /* J51NG OTA · Web Bluetooth 升级上位机 */
 import {createParser, MAX_FRAME} from "./rx_parse.mjs";
+import {takeDataReplies} from "./ack_wait.mjs";
 
 const SVC   = "00002760-08c2-11e1-9073-0e8ac72e1001";
 const CH_W  = "00002760-08c2-11e1-9073-0e8ac72e0001";
@@ -16,7 +17,9 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 let device=null, server=null, chW=null, chN=null;
 let frames=[], running=false, abort=false, target="M", fw=null;
 let hsReady=null;
+const LOCAL_API=["127.0.0.1","localhost","[::1]","::1"].includes(globalThis.location?.hostname);
 let apiAvailable=false, apiRunning=false, apiRemote=false, apiJobId=null;
+let apiLinkBusy=false, apiBle={connected:false, status:null};
 let switching=false;
 let writeChain=Promise.resolve();
 /* 实测（2026-11-16，S 板 / Windows，连接间隔 7.5 ms 已确认）：
@@ -90,6 +93,7 @@ function setBadge(mode){
 
 /* ---------------- BLE ---------------- */
 async function connect(){
+  if(LOCAL_API) return apiLink("connect");
   if(running || apiRunning || apiRemote) return;
   try{
     if(apiAvailable && (await apiRequest("/api/status")).running) throw new Error("服务端正在使用蓝牙");
@@ -157,6 +161,7 @@ function teardownLink(){
  * 之前每次调用都 disconnect→connect，升级一开始就连断两次，
  * 设备侧广播来不及恢复，直接导致 "Connection attempt failed"。 */
 function gatt(timeoutMs, force){
+  if(LOCAL_API) return Promise.reject(new Error("本地蓝牙由 API 管理"));
   if(__gattLock) return __gattLock;
   __gattLock=(async()=>{
   if(__cancelled) throw new Error("已取消");
@@ -442,6 +447,7 @@ async function sendHandshake(ms=target === "M" ? 12000 : 5000){
 }
 
 async function probeMode(){
+  if(LOCAL_API){ await apiLink("probe"); return apiBle.status?.mode || "unknown"; }
   const st = await queryStatus(1200, 1);
   hsReady = null;
   if(!st){
@@ -692,17 +698,19 @@ async function loadFile(f){
   }catch(e){ log("固件解析失败："+e.message,"err"); }
 }
 function refreshGo(){
-  const busy=running || apiRunning || apiRemote;
-  $("btnGo").disabled = busy || !fw || !(device && device.gatt.connected);
-  $("btnApiGo").disabled = busy || !apiAvailable || !fw || !["M","S"].includes(target);
-  $("btnConn").disabled=busy;
-  $("btnProbe").disabled=busy || !(device && device.gatt.connected);
-  $("btnDisc").disabled=apiRunning || apiRemote || !(device && device.gatt.connected);
-  $("btnStop").disabled=!busy;
-  $("btnApiGo").title=apiAvailable ? "使用本机原生蓝牙升级当前固件" : "本地 API 不可用，请启动 serve.py";
+  const busy=running || apiRunning || apiRemote || apiLinkBusy;
+  const linked=LOCAL_API ? apiBle.connected : !!(device && device.gatt.connected);
+  $("btnGo").disabled=busy || !fw || !linked || (LOCAL_API && !apiAvailable);
+  $("btnApiGo").hidden=true;
+  $("btnApiGo").disabled=true;
+  $("btnConn").disabled=busy || (LOCAL_API && !apiAvailable);
+  $("btnProbe").disabled=busy || !linked;
+  $("btnDisc").disabled=busy || !linked;
+  $("btnStop").disabled=!(running || apiRunning || apiRemote);
   for(const b of $("seg").children) b.disabled=busy;
   $("file").disabled=busy;
 }
+
 
 
 /* ---------------- 在线固件库 ---------------- */
@@ -825,6 +833,7 @@ async function waitReconnect(maxMs=20000, waitDiscMs=12000, trustApp=false){
 }
 
 async function startUpgrade(){
+  if(LOCAL_API) return apiUpgrade();
   if(!fw || running || apiRunning || apiRemote) return;
   running=true; abort=false; __userDisc=false; __devDisc=false; __cancelled=false; refreshGo();
   $("btnStop").disabled=false;
@@ -944,7 +953,7 @@ async function startUpgrade(){
 
     stage("传输数据");
     const td=performance.now();
-    let sent=0, acked=0, rtx=0, stale=0;
+    let sent=0, acked=0, rtx=0, stale=0, lastProgress=performance.now();
     while(acked<total){
       if(abort) throw new Error("已中止");
       const r0=Date.now();
@@ -957,12 +966,9 @@ async function startUpgrade(){
         sent++;
         if(gap) await sleep(gap);
       }
-      const deadline=Date.now()+1000;
       let moved=false;
-      while(Date.now()<deadline){
-        const i=frames.findIndex(f=>f.t===T.ACK||f.t===T.NACK);
-        if(i<0){ await sleep(10); if(Date.now()>deadline-900) break; continue; }
-        const f=frames.splice(i,1)[0];
+      const replies=await takeDataReplies(frames,{cancelled:()=>abort});
+      for(const f of replies){
         if(f.p.length<3) continue;
         const code=f.p[0], seq=rd16(f.p,1);
         if(f.t===T.ACK && code===0 && seq+1<=sent && seq+1>acked){ acked=seq+1; moved=true; }
@@ -975,12 +981,13 @@ async function startUpgrade(){
         }
       }
       if(window.__perf) window.__perf.rounds.push({dt:Date.now()-r0, acked, sent, moved});
-      if(!moved && acked<sent){
-        if(frames.length>50) frames.length=0;
-        stale++;
-        if(stale%5===0){ sent=acked; rtx++; log(`    ACK 未推进，回到 seq=${acked} 重传（${rtx}）`,"dim"); }
-        if(stale>30 || rtx>32) throw new Error(`设备无应答（ACK 超时，已确认 ${acked}/${total}）`);
-      }else{ stale=0; }
+      if(moved){ stale=0; lastProgress=performance.now(); }
+      else if(acked<sent && performance.now()-lastProgress>=3000){
+        sent=acked; rtx++; stale++;
+        log(`    3 s 无进展，回到 seq=${acked} 重传（${rtx}）`,"dim");
+        lastProgress=performance.now();
+        if(stale>6 || rtx>32) throw new Error(`设备无应答（ACK 超时，已确认 ${acked}/${total}）`);
+      }
       const el=(performance.now()-td)/1000;
       const pct=Math.round(acked/total*100);
       $("bar").style.width=pct+"%"; $("sPct").textContent=pct+"%";
@@ -1103,23 +1110,25 @@ function finishOk(t0, msg){
 }
 
 /* ---------------- 事件 ---------------- */
-$("btnConn").onclick=connect;
+$("btnConn").onclick=()=>connect().catch(e=>{ if(!LOCAL_API) log(e.message,"err"); });
 $("btnDisc").onclick=()=>{
   /* 用户手动断开：置标志，任何"升级中自动重连"都不许接管。
    * 同时作废会话代次并取消在途流程，防止超时后晚到的连接/AI 定时器再连回来。 */
+  if(LOCAL_API) return apiLink("disconnect").catch(()=>{});
   __userDisc=true; __cancelled=true; __session++;
   frames.length=0; __metaQ.length=0; __rxParser.reset();
   log("已手动断开（本次不会自动重连）","dim");
   try{ device.gatt.disconnect(); }catch(_){}
 };
-$("btnProbe").onclick=async()=>{ await probeMode(); refreshGo(); };
+$("btnProbe").onclick=async()=>{ try{ await probeMode(); }catch(_){} refreshGo(); };
 $("btnGo").onclick=startUpgrade;
 $("btnStop").onclick=stopUpgrade;
 $("btnClr").onclick=()=>{ $("log").innerHTML=""; };
 $("btnLib").onclick=loadLibrary;
 /* ---------------- 本机 API：共用当前固件、目标和任务状态 ---------------- */
 async function apiRequest(path, options={}){
-  const response=await fetch(path,{cache:"no-store",...options,signal:AbortSignal.timeout(10000)});
+  const {timeoutMs=10000,...requestOptions}=options;
+  const response=await fetch(path,{cache:"no-store",...requestOptions,signal:AbortSignal.timeout(timeoutMs)});
   const data=await response.json();
   if(!response.ok || (options.method && options.method!=="GET" && data.ok===false))
     throw new Error(data.err || `HTTP ${response.status}`);
@@ -1146,7 +1155,7 @@ async function stopUpgrade(){
   abort=true; log("已请求中止…","dim");
 }
 async function apiUpgrade(){
-  if(!fw || running || apiRunning || apiRemote || !apiAvailable) return;
+  if(!LOCAL_API || !fw || running || apiRunning || apiRemote || apiLinkBusy || !apiAvailable) return;
   const image=fw.slice(), selectedTarget=target;
   apiRunning=true; refreshGo();
   try{
@@ -1157,7 +1166,6 @@ async function apiUpgrade(){
     __userDisc=true; __cancelled=true; __session++;
     try{ device?.gatt?.disconnect(); }catch(_){}
     server=null; chW=null; chN=null; hsReady=null;
-    await sleep(400);
     $("sPct").textContent="0%"; $("bar").style.width="0%";
     $("sPkt").textContent="0/0"; $("sSpd").textContent="0"; $("sRtx").textContent="0";
     $("tConn").textContent="--"; $("tHs").textContent="--";
@@ -1184,17 +1192,61 @@ async function apiUpgrade(){
   }catch(e){ log("[API] "+e.message,"err"); }
   finally{ apiRunning=false; await syncApiState(); refreshGo(); }
 }
+function applyNativeBle(ble){
+  apiBle=ble || {connected:false, status:null};
+  if(apiBle.connected){
+    $("hName").textContent=apiBle.name || "蓝牙设备";
+    $("kId").textContent=apiBle.address || "—";
+    const st=apiBle.status;
+    if(st) applyStatus({...st,metaValid:st.meta_valid,hcrcOk:st.hcrc_ok,
+      resetPend:st.reset_pending,fwVersion:st.fw_version,payloadCrc:st.payload_crc});
+    else { setBadge(null); $("hMeta").textContent="已连接 · 点击读状态查询模式"; }
+    if(!apiRunning && !apiRemote) chip("已连接","on");
+  }else if(!apiRunning && !apiRemote){
+    chip("未连接",""); setBadge(null);
+    $("hMeta").textContent=apiAvailable ? "点击连接蓝牙" : "本地服务不可用，请启动 serve.py";
+    $("kHw").textContent="—"; $("kVer").textContent="—";
+  }
+}
+async function apiLink(operation){
+  if(apiRunning || apiRemote || apiLinkBusy) return;
+  apiLinkBusy=true; refreshGo();
+  try{
+    const result=await apiRequest("/api/"+operation,{method:"POST",timeoutMs:45000});
+    applyNativeBle(result.ble);
+    const st=apiBle.status;
+    log(operation==="disconnect" ? "蓝牙已断开" :
+      `本地蓝牙${operation==="connect"?"已连接":"状态"}：${apiBle.name || "设备"}`+
+      (st?` · ${modeTxt(st.mode)} · ${st.size} B / crc ${h(st.payload_crc)}`:""),"ok");
+    return apiBle;
+  }catch(e){
+    log("蓝牙操作失败："+e.message,"err");
+    await syncApiState();
+    throw e;
+  }finally{ apiLinkBusy=false; refreshGo(); }
+}
 async function syncApiState(){
-  if(location.hostname!=="127.0.0.1" && location.hostname!=="localhost") return;
+  if(!LOCAL_API) return;
   try{
     const st=await apiRequest("/api/status");
+    if(st.transport!=="native-ble-v1") throw new Error("本地服务需要重启更新");
     apiAvailable=true; apiRemote=!!st.running;
     if(!apiRunning){ apiJobId=st.job_id; if(st.running) showApiProgress(st); }
-  }catch(_){ apiAvailable=false; }
+    applyNativeBle(st.ble);
+  }catch(_){ apiAvailable=false; apiBle={connected:false,status:null}; }
   refreshGo();
 }
+
 $("btnApiGo").onclick=apiUpgrade;
-setInterval(()=>{ if(!apiRunning && !running) syncApiState(); },2000);
+$("btnApiGo").hidden=true;
+$("btnApiGo").style.display="none";
+const transportSubtitle=document.querySelector?.(".brand .sub");
+if(transportSubtitle) transportSubtitle.textContent=LOCAL_API ? "本地 API 蓝牙连接" : "浏览器直连 · Web Bluetooth";
+if(LOCAL_API){
+  $("hMeta").textContent="正在连接本地蓝牙服务…";
+  log("本地模式：连接、读状态和升级统一通过 API", "dim");
+}
+setInterval(()=>{ if(LOCAL_API && !apiRunning && !running && !apiLinkBusy) syncApiState(); },2000);
 syncApiState();
 
 loadLibrary();
@@ -1232,7 +1284,7 @@ window.addEventListener("pagehide", releaseBle);
 window.addEventListener("beforeunload", releaseBle);
 
 /* 能力检测 */
-if(!navigator.bluetooth){
+if(!LOCAL_API && !navigator.bluetooth){
   log("当前浏览器不支持 Web Bluetooth：请用安卓 Chrome / Edge，并确保是 https 页面","err");
 }
 
@@ -1245,12 +1297,13 @@ window.ota = {
   sentMeta(){ return window.__j5aa || null; },
   status(){
     return {
-      connected: !!(device && device.gatt.connected),
-      name: device ? device.name : null,
+      connected: LOCAL_API ? apiBle.connected : !!(device && device.gatt.connected),
+      transport: LOCAL_API ? "api" : "web-bluetooth",
+      name: LOCAL_API ? apiBle.name : (device ? device.name : null),
       mode: $("hBadge").textContent,
       hw: $("kHw").textContent,
       ver: $("kVer").textContent,
-      running,
+      running: running || apiRunning || apiRemote,
       pct: $("sPct").textContent,
       pkts: $("sPkt").textContent,
       speed: $("sSpd").textContent,
@@ -1259,6 +1312,7 @@ window.ota = {
     };
   },
   async connectGranted(){
+    if(LOCAL_API) return connect();
     if(!navigator.bluetooth.getDevices) throw new Error("浏览器不支持 getDevices");
     const devs = await navigator.bluetooth.getDevices();
     if(!devs.length) throw new Error("没有已授权的设备，请手动点一次「连接蓝牙」");
@@ -1322,6 +1376,7 @@ window.ota = {
     return out;
   },
   async scanAndConnect(maxMs=30000){
+    if(LOCAL_API){ const b=await connect(); return b?.status?.mode || "unknown"; }
     const t0=performance.now(); let n=0;
     /* 已经连着同一个中心时绝不 re-requestDevice：BLE 从机连上后不再广播，
        重复请求只会让 chooser 空列表或把现有连接踢掉。直接复用现有连接。 */
@@ -1358,14 +1413,14 @@ window.ota = {
      不弹 chooser（前提：本页已有一次授权或已连接）。 */
   async autoClosure(opt={}){
     const targetSel = opt.target || "M";
-    const url = opt.url || "./firmware/M_9501-000-02166_v1.hex";
+    const url = opt.url || (targetSel==="S" ? "./firmware/S_app_latest.bin" : "./firmware/M_app_latest.hex");
     const rounds = opt.rounds || 1;
     const out = [];
     window.ota.setTarget(targetSel);
     for(let i=1;i<=rounds;i++){
       const step = {round:i};
       step.connect = await window.ota.scanAndConnect(opt.connectMs||30000);
-      if(step.connect==="app"){
+      if(!LOCAL_API && step.connect==="app"){
         log(`[auto ${i}] 在 APP，发送进 Boot 命令…`,"dim");
         step.enterBoot = await enterBoot();
         if(!step.enterBoot) throw new Error("自动进 Boot 失败");
@@ -1384,6 +1439,7 @@ window.ota = {
     return out;
   },
   async reconnect(){
+    if(LOCAL_API){ await apiLink("disconnect"); return connect(); }
     try{ device?.gatt?.disconnect(); }catch(_){}
     await sleep(700);
     await gatt();

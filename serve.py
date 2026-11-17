@@ -6,6 +6,8 @@ J51NG OTA 上位机 —— 带 API 的静态服务器（替换 python -m http.se
   GET  /api/status            当前任务状态
   GET  /api/log?since=N       增量日志
   POST /api/ota?target=S&file=...   启动一轮完整闭环
+  POST /api/connect|probe|disconnect  连接、只读查询、断开（不会发送升级握手）
+  POST /api/abort?job_id=...    取消当前升级并释放连接
   POST /api/reset             清空日志
 
 闭环流程（普通任务全程只走 BLE，不碰 SWD）：
@@ -16,6 +18,7 @@ J51NG OTA 上位机 —— 带 API 的静态服务器（替换 python -m http.se
 
 调试用的 step_verify() 仍保留（pyocd 读 pc），但普通 /api/ota 不再调用它。
 """
+import concurrent.futures
 import json, os, queue, re, subprocess, sys, tempfile, threading, time, traceback, uuid
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -28,6 +31,7 @@ PACK  = r"E:\tof\xuRxuG\05_scripts\tools\pyocd-packs\Nationstech.N32WB03x_DFP.1.
 
 sys.path.insert(0, str(TOOLS))
 sys.path.insert(0, str(ART))
+sys.path.insert(0, str(WEB))
 
 # Windows 控制台默认 GBK，日志里的 ✅/⚠ 等字符会让 print 抛 UnicodeEncodeError，
 # 进而把已经成功的任务判成"异常"。改成不可编码字符替换，日志永不打断流程。
@@ -50,6 +54,34 @@ _state = {"running": False, "stage": "-", "ok": None, "t0": None,
 _task = None
 OTA_TIMEOUT_S = 300
 UPLOAD_MAX = 0x40000
+_native = None
+_native_lock = threading.Lock()
+_link_busy = False
+
+
+def native_session():
+    global _native
+    with _native_lock:
+        if _native is None:
+            from ble_session import NativeBleSession
+            _native = NativeBleSession(native_log)
+        return _native
+
+
+def native_snapshot():
+    return _native.snapshot() if _native is not None else {
+        "connected": False, "name": "", "address": "", "status": None,
+        "busy": False, "operation": None}
+
+
+def native_log(line):
+    log(line)
+    m = re.search(r"(\d+)/(\d+)\s+(\d+) B\s+([\d.]+) s\s+([\d.]+) B/s.*?重传 (\d+)", line)
+    if m:
+        done, total, size, elapsed, speed, retry = m.groups()
+        with _lock:
+            _state["progress"] = dict(done=int(done), total=int(total), size=int(size),
+                elapsed=float(elapsed), speed=float(speed), retry=int(retry))
 
 
 def resolve_firmware(value):
@@ -72,9 +104,9 @@ def request_abort(job_id=None):
             raise ValueError("任务已切换，请刷新状态")
         task["cancel"].set()
         _state["stage"] = "正在中止"
-        p = task.get("process")
-    if p is not None and p.poll() is None:
-        p.kill()
+        future = task.get("future")
+    if future is not None:
+        native_session().cancel(future)
     return True
 
 def log(msg, tag=""):
@@ -128,68 +160,32 @@ def step_enter_boot(target="S"):
     return True
 
 def step_ota(target, fw, task):
-    env = dict(os.environ, PYTHONPATH=str(TOOLS), PYTHONUNBUFFERED="1", PYTHONIOENCODING="utf-8")
-    p = subprocess.Popen(
-        [sys.executable, "ota_ble_s.py", "--target", target, "--file", str(fw),
-         "--pkt", "128", "--window", "8", "--gap", "4", "--go"],
-        cwd=str(ART), env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    session = native_session()
+    future = session.start("ota", target=target, firmware=fw)
     with _lock:
-        task["process"] = p
-    output = queue.Queue()
-
-    def read_output():
-        try:
-            for raw in p.stdout:
-                output.put(raw)
-        finally:
-            output.put(None)
-
-    reader = threading.Thread(target=read_output, daemon=True)
-    reader.start()
+        task["future"] = future
     deadline = time.monotonic() + OTA_TIMEOUT_S
-    timed_out = False
     try:
         while True:
-            if task["cancel"].is_set() or time.monotonic() >= deadline:
-                timed_out = not task["cancel"].is_set()
-                if p.poll() is None:
-                    p.kill()
-                break
+            if task["cancel"].is_set():
+                session.cancel(future)
+                return False
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                session.cancel(future)
+                log(f"OTA 超时 {OTA_TIMEOUT_S} s，正在释放连接", "err")
+                return False
             try:
-                raw = output.get(timeout=0.1)
-            except queue.Empty:
-                continue
-            if raw is None:
-                break
-            try:
-                line = raw.decode("utf-8").rstrip()
-            except UnicodeDecodeError:
-                line = raw.decode("gb18030", errors="replace").rstrip()
-            if line:
-                log(line)
-                m = re.search(r"(\d+)/(\d+)\s+(\d+) B\s+([\d.]+) s\s+([\d.]+) B/s.*?重传 (\d+)", line)
-                if m:
-                    done, total, size, elapsed, speed, retry = m.groups()
-                    with _lock:
-                        _state["progress"] = dict(done=int(done), total=int(total), size=int(size),
-                                                  elapsed=float(elapsed), speed=float(speed), retry=int(retry))
-        p.wait(timeout=max(0.1, deadline - time.monotonic()) if not timed_out else 5)
-    except subprocess.TimeoutExpired:
-        timed_out = True
-        p.kill()
-        p.wait(timeout=5)
+                return bool(future.result(timeout=min(0.2, remaining)))
+            except concurrent.futures.TimeoutError:
+                if future.done():
+                    raise  # The operation itself timed out, rather than this wait.
+            except concurrent.futures.CancelledError:
+                return False
     finally:
-        if p.poll() is None:
-            p.kill()
-            p.wait(timeout=5)
-        reader.join(timeout=2)
-        p.stdout.close()
+        session.wait_idle(timeout=12)
         with _lock:
-            task["process"] = None
-    if timed_out:
-        log(f"OTA 超时 {OTA_TIMEOUT_S} s，子进程已结束", "err")
-    log(f"ota_ble_s.py 退出码 {p.returncode}")
-    return p.returncode == 0 and not timed_out and not task["cancel"].is_set()
+            task["future"] = None
 
 def step_verify(max_s=120):
     """【手动调试用，普通 /api/ota 不再调用】复位后轮询 SWD 看 pc 落点。"""
@@ -271,8 +267,9 @@ class Handler(SimpleHTTPRequestHandler):
     def do_GET(self):
         u = urlparse(self.path)
         if u.path == "/api/status":
+            ble = native_snapshot()
             with _lock:
-                return self._json({**_state,
+                return self._json({**_state, "transport": "native-ble-v1", "ble": ble,
                                    "elapsed": round((_state.get("finished") or time.time()) - _state["t0"], 1) if _state["t0"] else 0,
                                    "lines": len(_lines)})
         if u.path == "/api/log":
@@ -282,9 +279,25 @@ class Handler(SimpleHTTPRequestHandler):
         return super().do_GET()
 
     def do_POST(self):
-        global _task
+        global _task, _link_busy
         u = urlparse(self.path)
         q = parse_qs(u.query)
+        if u.path in ("/api/connect", "/api/disconnect", "/api/probe"):
+            with _lock:
+                if _state["running"] or _link_busy:
+                    return self._json({"ok": False, "err": "蓝牙正在处理其它操作"}, 409)
+                _link_busy = True
+            try:
+                operation = u.path.rsplit("/", 1)[1]
+                ble = native_session().call(operation, timeout=40)
+                return self._json({"ok": True, "ble": ble})
+            except Exception as exc:
+                log(str(exc), "err")
+                return self._json({"ok": False, "err": str(exc),
+                                   "ble": native_snapshot()}, 503)
+            finally:
+                with _lock:
+                    _link_busy = False
         if u.path == "/api/ota":
             temporary = False
             fw = None
@@ -307,11 +320,11 @@ class Handler(SimpleHTTPRequestHandler):
                 else:
                     fw = resolve_firmware(q.get("file", ["firmware/S_app_latest.bin"])[0])
                 with _lock:
-                    if _state["running"]:
+                    if _state["running"] or _link_busy:
                         if temporary:
                             fw.unlink(missing_ok=True)
                         return self._json({"ok": False, "err": "已有任务在跑"}, 409)
-                    task = {"id": uuid.uuid4().hex, "cancel": threading.Event(), "process": None}
+                    task = {"id": uuid.uuid4().hex, "cancel": threading.Event(), "future": None}
                     _task = task
                     _lines.clear()
                     _state.update(running=True, stage="启动", ok=None, t0=time.time(),

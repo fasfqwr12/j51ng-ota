@@ -1,0 +1,17 @@
+import assert from 'node:assert/strict';
+import {takeDataReplies} from './ack_wait.mjs';
+let time=0, sleeps=0;
+const ack={t:0x0302,p:new Uint8Array([0,0,7])};
+const queue=[{t:0x0000,p:new Uint8Array()},ack];
+let r=await takeDataReplies(queue,{now:()=>time,sleep:async ms=>{time+=ms;sleeps++;}});
+assert.equal(r.length,1); assert.equal(time,0); assert.equal(sleeps,0);
+assert.equal(queue.length,1,'beacon preserved');
+const delayed=[];time=0;
+r=await takeDataReplies(delayed,{now:()=>time,sleep:async ms=>{time+=ms;if(time>=15)delayed.push(ack);}});
+assert.equal(time,15,'return on first arriving ACK without 100ms tail');assert.equal(r.length,1);
+time=0;r=await takeDataReplies([],{timeout:40,now:()=>time,sleep:async ms=>{time+=ms;}});
+assert.equal(time,40); assert.equal(r.length,0);
+const nack={t:0x0303,p:new Uint8Array([0x10,0,4])};time=0;
+r=await takeDataReplies([ack,nack,ack],{now:()=>time});assert.equal(r.length,2);
+await assert.rejects(takeDataReplies([],{cancelled:()=>true}),/已中止/);
+console.log('PASS 5 ACK timing cases: immediate, delayed, timeout, NACK order, cancellation; no 100ms tail');

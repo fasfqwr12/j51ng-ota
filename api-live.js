@@ -1,5 +1,6 @@
 /* 服务端闭环日志面板：默认收起，点右上角"显示 API 日志"展开。轮询 /api/log，纯 HTTP，不碰 BLE。 */
 (() => {
+  if (!["127.0.0.1", "localhost", "[::1]", "::1"].includes(location.hostname)) return;
   if (window.__apiLiveLoaded) return;
   window.__apiLiveLoaded = true;
 
