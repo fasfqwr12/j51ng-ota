@@ -1,26 +1,26 @@
 {
- "updated": 1794887977,
+ "updated": 1794888990,
  "items": [
   {
    "file": "M_app_latest.bin",
    "size": 100400,
    "fileSize": 100400,
-   "sha256": "8ef7027cf2764a0399e3b5ad864a999bbca2256c921c157c3cdf9f0ab32bf917",
-   "mtime": 1794887285.1858609
+   "sha256": "732912432eb35e088b399a925945d9599e7864ccac9afb487fd104c5f97a7942",
+   "mtime": 1794888954.1134005
   },
   {
    "file": "M_app_latest.hex",
    "size": 276144,
    "fileSize": 276144,
-   "sha256": "9dba1b007b8eaf6534956bfd009188b33e22019b166884a72974c69f8ac8d38f",
-   "mtime": 1794887977.4058487
+   "sha256": "ed9a424d5ebf542941c81d9d1ba19485274869e2a108a5043ae82826f8679f9b",
+   "mtime": 1794888990.721528
   },
   {
    "file": "S_app_latest.bin",
-   "size": 43252,
-   "fileSize": 43252,
-   "sha256": "90020c87fcc0c2b694b5b979ad99f177eea0223a5a2df12a34df447bb099a068",
-   "mtime": 1794887916.4618964
+   "size": 43316,
+   "fileSize": 43316,
+   "sha256": "4820987c2592f4cada0bfb6153fae712b737fb90aaa31efc12d6d1ea52f66685",
+   "mtime": 1794888980.649456
   }
  ]
 }

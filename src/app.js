@@ -434,14 +434,16 @@ function enterBoot(){
 /* 把 0x0612 的结果刷到界面 */
 function applyStatus(st){
   setBadge(st.mode);
-  $("kHw").textContent = st.mode==="boot" ? "J51VA-S (Boot)" : (st.metaValid ? "J51VA-S" : "—");
+  /* schema 2 带型号与机器身份；旧固件只有裸版本，界面如实标注。 */
+  const who = st.model ? `${st.model} (${st.deviceId})` : "旧固件(型号未知)";
+  $("kHw").textContent = st.mode==="boot" ? `${who} · Boot` : who;
   $("kVer").textContent = st.metaValid ? `${(st.fwVersion>>8)&0xFF}.${st.fwVersion&0xFF}` : "—";
   $("kMeta").textContent = st.metaValid
-    ? `运行镜像 ${st.size} B · crc ${h(st.payloadCrc)} · 容量 ${st.capacity} B`
+    ? `${st.versionText||""} · 容量 ${st.capacity} B`
     : "无镜像头信息";
   $("hMeta").textContent = st.mode==="boot"
-    ? `Boot 模式 · 可直接升级${st.resetPend?" · 已排定复位":""}`
-    : `APP 模式 · 运行 v${(st.fwVersion>>8)&0xFF}.${st.fwVersion&0xFF}`;
+    ? `Boot 模式 · ${who} · 可直接升级${st.resetPend?" · 已排定复位":""}`
+    : `APP 模式 · ${st.versionText || `v${(st.fwVersion>>8)&0xFF}.${st.fwVersion&0xFF}`}`;
   if(st.resetPend) log("    设备已排定复位（升级交班中）","dim");
   if(st.metaValid && !st.hcrcOk) log("    ⚠ 设备镜像头自校验不通过","err");
 }
@@ -466,7 +468,8 @@ async function probeMode(){
   }
   applyStatus(st);
   log(`只读查询 → ${st.mode==="boot"?"Boot":"APP"}`
-    + (st.metaValid ? ` · v${(st.fwVersion>>8)&0xFF}.${st.fwVersion&0xFF} · ${st.size} B` : "")
+    + (st.model ? ` · ${st.model} (${st.deviceId})` : " · 旧固件(型号未知)")
+    + (st.metaValid ? ` · ${st.versionText}` : "")
     + "（未握手，设备状态未改变）","ok");
   return st.mode;
 }
@@ -636,21 +639,26 @@ function showMeta(meta, fwLen){
 }
 
 /* ---------------- 只读状态查询（0x0610 -> 0x0612） ----------------
- * 这是唯一允许的"读状态"手段：不改设备 OTA 状态、不触发复位、不发 M 握手。
- * 32B 应答，多字节字段统一小端（与固件一致）。 */
+ * 唯一允许的状态查询：不改设备、不握手、不复位。
+ * schema 1 = 32B（旧）；schema 2 = 48B，追加型号/机器身份/元数据格式版本。
+ * 前 32B 两版一致，旧设备仍能解析。 */
 const BOOT_TARGET = {0:"NONE", 1:"M", 2:"R", 3:"S"};
+const BOOT_DEVICE = {0:"UNKNOWN", 1:"M", 2:"S"};
 function parseStatus(p){
   if(!p || p.length < 32) return null;
   if(p[0]!==0x4A || p[1]!==0x35 || p[2]!==0x53 || p[3]!==0x54) return null;  /* "J5ST" */
-  if(p[4] !== 1) return null;
+  const schema = p[4];
+  if(schema !== 1 && schema !== 2) return null;
   const dv = new DataView(p.buffer, p.byteOffset, p.byteLength);
-  return {
+  const fw = dv.getUint16(16, true), hw = dv.getUint16(18, true);
+  const st = {
+    schema, 
     mode      : p[5]===0 ? "boot" : "app",
     flags     : dv.getUint16(6, true),
     size      : dv.getUint32(8, true),
     payloadCrc: dv.getUint32(12, true),
-    fwVersion : dv.getUint16(16, true),
-    hwVersion : dv.getUint16(18, true),
+    fwVersion : fw,
+    hwVersion : hw,
     phase     : p[20],
     target    : BOOT_TARGET[p[21]] || "?",
     maxPayload: dv.getUint16(22, true),
@@ -660,6 +668,20 @@ function parseStatus(p){
     hcrcOk    : !!(dv.getUint16(6, true) & 0x0002),
     resetPend : !!(dv.getUint16(6, true) & 0x0004)
   };
+  if(schema >= 2 && p.length >= 48){
+    let model = "";
+    for(let i=0;i<8;i++){ if(!p[32+i]) break; model += String.fromCharCode(p[32+i]); }
+    st.model     = model;
+    st.deviceId  = BOOT_DEVICE[p[40]] || "?";
+    st.metaFmt   = p[41];
+    st.hwVersion = dv.getUint16(42, true);
+    st.versionText = `${model||"?"} v${(fw>>8)&0xFF}.${fw&0xFF} crc=0x${st.payloadCrc.toString(16).padStart(8,"0").toUpperCase()} ${st.size}B`;
+  } else {
+    st.model = "";
+    st.deviceId = "UNKNOWN";
+    st.versionText = `v${(fw>>8)&0xFF}.${fw&0xFF} crc=0x${st.payloadCrc.toString(16).padStart(8,"0").toUpperCase()} ${st.size}B (旧固件)`;
+  }
+  return st;
 }
 async function queryStatus(ms=1000, retry=1){
   for(let k=0;k<=retry;k++){
@@ -1215,7 +1237,8 @@ function applyNativeBle(ble){
     $("kId").textContent=apiBle.address || "—";
     const st=apiBle.status;
     if(st) applyStatus({...st,metaValid:st.meta_valid,hcrcOk:st.hcrc_ok,
-      resetPend:st.reset_pending,fwVersion:st.fw_version,payloadCrc:st.payload_crc});
+      resetPend:st.reset_pending,fwVersion:st.fw_version,payloadCrc:st.payload_crc,
+      deviceId:st.device_id,versionText:st.version_text,model:st.model});
     else { setBadge(null); $("hMeta").textContent="已连接 · 点击读状态查询模式"; }
     if(!apiRunning && !apiRemote) chip("已连接","on");
   }else if(!apiRunning && !apiRemote){
@@ -1233,7 +1256,7 @@ async function apiLink(operation){
     const st=apiBle.status;
     log(operation==="disconnect" ? "蓝牙已断开" :
       `本地蓝牙${operation==="connect"?"已连接":"状态"}：${apiBle.name || "设备"}`+
-      (st?` · ${modeTxt(st.mode)} · ${st.size} B / crc ${h(st.payload_crc)}`:""),"ok");
+      (st?` · ${modeTxt(st.mode)} · ${st.model||"旧固件"}${st.device_id?`(${st.device_id})`:""} · ${st.size} B / crc ${h(st.payload_crc)}`:""),"ok");
     return apiBle;
   }catch(e){
     log("蓝牙操作失败："+e.message,"err");
