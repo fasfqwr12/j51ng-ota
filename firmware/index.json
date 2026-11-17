@@ -1,5 +1,5 @@
 {
- "updated": 1794888990,
+ "updated": 1794889433,
  "items": [
   {
    "file": "M_app_latest.bin",
@@ -19,8 +19,8 @@
    "file": "S_app_latest.bin",
    "size": 43316,
    "fileSize": 43316,
-   "sha256": "4820987c2592f4cada0bfb6153fae712b737fb90aaa31efc12d6d1ea52f66685",
-   "mtime": 1794888980.649456
+   "sha256": "be0b78553024987d467678d46ab8cf4f83ccaf0c0ecb23950078f0c9251cf2a1",
+   "mtime": 1794889426.6077247
   }
  ]
 }
