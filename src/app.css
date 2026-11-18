@@ -227,3 +227,6 @@ button.soft{background:transparent}
 .bdlog .ln .t{opacity:.5;margin-right:6px}
 .bdlog .ln .c{font-weight:800;color:var(--accent)}
 .bdlog .ln.bad{color:var(--err,#b3261e)}
+
+/* hidden 属性优先级：.dock 用了 position:fixed，默认 display 会盖掉 hidden */
+.dock[hidden]{display:none !important}
