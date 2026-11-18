@@ -25,7 +25,14 @@
   </div>
 </div>
 
-<div class="wrap">
+<div class="tabs">
+  <div class="inner">
+    <button class="tab on" data-tab="ota">升级</button>
+    <button class="tab" data-tab="board">测距板</button>
+  </div>
+</div>
+
+<div class="wrap" id="pane-ota">
 
   <div class="card">
     <div class="sec"><span class="n">1</span><h2>设备</h2><span class="tail" id="tailDev">待连接</span></div>
@@ -124,6 +131,67 @@
     <div class="note" style="margin-top:12px">
       手机使用需要 <b>HTTPS</b> 页面（就是现在这个 GitHub Pages 地址）。安卓 Chrome / Edge 可用，iOS Safari 不支持 Web Bluetooth。
     </div>
+  </div>
+
+  <div style="height:8px"></div>
+</div>
+
+<!-- ================= 测距板：设备信息（只读监控） ================= -->
+<div class="wrap" id="pane-board" hidden>
+
+  <div class="card">
+    <div class="sec"><span class="n">A</span><h2>设备信息</h2><span class="tail" id="bdTail">等待数据</span></div>
+
+    <div class="bdmain">
+      <div class="bdtag" id="bdModeTag">模式 —</div>
+      <div class="bdval" id="bdMainVal">—</div>
+      <div class="bdunit" id="bdMainUnit">m</div>
+    </div>
+    <div class="bdsub" id="bdMainSub">还没收到测距数据</div>
+
+    <dl class="kv">
+      <dt>坡度</dt><dd id="bdSlope">—</dd>
+      <dt>垂直高度</dt><dd id="bdVd">—</dd>
+      <dt>电量</dt><dd id="bdBat">—</dd>
+      <dt>雷达</dt><dd id="bdLidar">—</dd>
+      <dt>球速</dt><dd id="bdSpeed">—</dd>
+      <dt>推荐杆</dt><dd id="bdClub">—</dd>
+    </dl>
+    <div class="hint">距离与两点距共用 0x07，标题由副板上报的 0x0C 模式决定。</div>
+  </div>
+
+  <div class="card">
+    <div class="sec"><span class="n">B</span><h2>下发</h2><span class="tail" id="bdTxTail">待发送</span></div>
+
+    <div class="row" style="align-items:flex-end;gap:10px">
+      <label style="flex:1;min-width:160px">
+        <span class="lbl">推荐杆</span>
+        <select id="bdClubSel"></select>
+      </label>
+      <button class="primary" id="bdSendClub">下发推荐杆</button>
+    </div>
+
+    <div class="row" style="margin-top:10px">
+      <button id="bdWake">唤醒 (0x03=1)</button>
+      <button id="bdSleep">休眠 (0x03=2)</button>
+      <button id="bdLinkQ">查连接 (0x05)</button>
+      <button id="bdVerQ">查版本 (0x0A)</button>
+    </div>
+
+    <div class="row" style="margin-top:10px;align-items:flex-end;gap:10px">
+      <label style="flex:1;min-width:160px">
+        <span class="lbl">任意帧（hex，不含帧头）</span>
+        <input id="bdRaw" placeholder="例如 09 03">
+      </label>
+      <button id="bdRawSend">发送</button>
+    </div>
+    <div class="hint">下发帧固定为 53 A2 帧；hex 只填 code 及其后的数据。</div>
+  </div>
+
+  <div class="card">
+    <div class="sec"><span class="n">C</span><h2>原始帧</h2>
+      <span class="tail"><button id="bdClr" style="padding:4px 9px;font-size:11.5px">清空</button></span></div>
+    <div class="bdlog" id="bdLog"></div>
   </div>
 
   <div style="height:8px"></div>
