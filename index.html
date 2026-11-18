@@ -29,6 +29,7 @@
   <div class="inner">
     <button class="tab on" data-tab="ota">升级</button>
     <button class="tab" data-tab="board">测距板</button>
+    <button class="tab" data-tab="rod">杆包</button>
   </div>
 </div>
 
@@ -203,8 +204,34 @@
   </div>
 </div>
 
+<!-- ================= 杆包：自定义 Pro（第 5 档推荐杆模型） ================= -->
+<div class="wrap" id="pane-rod" hidden>
+
+  <div class="card">
+    <div class="sec"><span class="n">A</span><h2>自定义杆包</h2><span class="tail" id="rdTail">等待</span></div>
+
+    <div class="rdbar">
+      <button id="rdRead">读取主控状态</button>
+      <button class="primary" id="rdSend">下发到主控</button>
+      <button id="rdDefault">载入默认</button>
+      <button id="rdErase">擦除</button>
+    </div>
+
+    <div class="meta" id="rdStatus" style="margin-top:10px">主控：未读取</div>
+
+    <div id="rdGrid"></div>
+
+    <div class="hint" style="margin-top:12px">
+      这张表对应设置页第 5 档「自定义 Pro」。均值/标准差单位是<b>码</b>，
+      下发时自动换算成主控要的 <b>码×2</b> 定点。
+      crc 一致就说明主控里那张表和你现在看到的是同一份。
+    </div>
+  </div>
+</div>
+
 <script type="module" src="./src/app.js?v=78"></script>
 <script type="module" src="./src/board.js?v=3"></script>
+<script type="module" src="./src/rod.js?v=1"></script>
 <script src="./api-live.js?v=4"></script>
 </body>
 </html>

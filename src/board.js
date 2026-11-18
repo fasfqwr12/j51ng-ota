@@ -210,7 +210,7 @@
     }
 
     /* tab 切换 */
-    const panes = { ota: $("pane-ota"), board: $("pane-board") };
+    const panes = { ota: $("pane-ota"), board: $("pane-board"), rod: $("pane-rod") };
     const dock = document.querySelector(".dock");   /* 底部升级操作栏只在「升级」页出现 */
     document.querySelectorAll(".tab").forEach((btn) => {
       btn.addEventListener("click", () => {
