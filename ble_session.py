@@ -22,6 +22,9 @@ class NativeBleSession:
         self._guard = threading.Lock()
         self._snapshot = {"connected": False, "name": "", "address": "",
                           "status": None, "busy": False, "operation": None}
+        # ---- 测距板（53A2/54A1）通道：与 OTA 共用同一条 BLE 连接 ----
+        self.app_rx = bytearray()   # 所有 notify 原始字节
+        self._frames = []           # 已解析出的 54A1 帧（hex 字符串）
         self.thread.start()
         self._monitor_future = asyncio.run_coroutine_threadsafe(self._monitor(), self.loop)
 
@@ -62,7 +65,46 @@ class NativeBleSession:
             ota_ble_s.log = self.log
             self.host = ota_ble.BleHost(ota_ble_s.NAME_PREFIX, None, None, None, chunk=241)
             self.host.asm = ota_ble_s.CrcFrameAssembler()
+            # ota_ble 的 _on_notify 只喂 EB90 的 CrcFrameAssembler，
+            # 54A1 会被当垃圾丢掉。这里串一层，把原始字节也留一份给测距板用。
+            self._install_rx_hook(self.host)
         return self.host
+
+    def _install_rx_hook(self, host):
+        if getattr(host, "_j51ng_rx_hook", False):
+            return
+        original = host._on_notify
+
+        def _wrapped(sender, data):
+            try:
+                self.app_rx.extend(bytes(data))
+                self._pump_app_frames()
+            except Exception:
+                pass
+            return original(sender, data)
+
+        host._on_notify = _wrapped
+        host._j51ng_rx_hook = True
+
+    def _pump_app_frames(self):
+        """从 app_rx 里切出完整的 54 A1 帧；不完整的留在缓冲里等下一包。"""
+        buf = self.app_rx
+        i = 0
+        while i + 7 <= len(buf):
+            if buf[i] == 0x54 and buf[i + 1] == 0xA1:
+                n = buf[i + 2] | (buf[i + 3] << 8)
+                total = n + 4
+                if i + total > len(buf):
+                    break
+                self._frames.append(bytes(buf[i + 4:i + n + 2]).hex())
+                i += total
+            else:
+                i += 1
+        if i:
+            del buf[:i]
+        if len(self._frames) > 4000:
+            del self._frames[:-2000]
+        return self._frames
 
     async def _query(self):
         import ota_ble_s
@@ -75,7 +117,7 @@ class NativeBleSession:
             raise TimeoutError("设备只读状态无应答；未发送升级握手")
         return self._publish(status)
 
-    async def _execute(self, operation, *, target=None, firmware=None):
+    async def _execute(self, operation, *, target=None, firmware=None, payload=None):
         host = self._host()
         if operation == "disconnect":
             await host.close()
@@ -95,6 +137,14 @@ class NativeBleSession:
                 # A read-only status miss must not discard an otherwise-live GATT owner.
                 self.log(str(exc))
                 return self._publish(clear_status=True)
+        if operation == "raw":
+            if not host.client or not host.client.is_connected or host.wr is None:
+                raise ConnectionError("蓝牙未连接，请先连接设备")
+            await host.write_bytes(bytes(payload or b""))
+            return True
+        if operation == "rx":
+            self._pump_app_frames()
+            return list(self._frames)
         if operation == "fault":
             import ota_ble_s
             if not host.client or not host.client.is_connected:

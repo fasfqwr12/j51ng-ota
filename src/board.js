@@ -134,15 +134,68 @@
     render();
   }
 
-  /* ---------- 下发 ---------- */
+  /* ---------- 下发 ----------
+   * 【2026-11-18 修正两处】
+   * 1) 原来把 [cmd, ...data] 直接当特征值写出去，缺 53 A2 / len / sum 封装，
+   *    副板只认 53 A2 开头，所以任何下发都被丢弃。现在统一走 buildFrame()。
+   * 2) 本地 API 模式下 BLE 连接归后端所有，浏览器拿不到 notify，
+   *    api.connected() 永远是 false。这种模式下改走后端 /api/raw + /api/rx。 */
+  const API_MODE = ["127.0.0.1", "localhost", "[::1]", "::1"].includes(location.hostname);
+  let apiRxSince = 0;
+
+  function buildFrame(cmd, data) {
+    const pl = new Uint8Array(data || []);
+    const api = window.__J51NG;
+    if (api && typeof api.frame === "function") return api.frame(cmd, pl);
+    const n = pl.length + 3;
+    const f = new Uint8Array(4 + 1 + pl.length + 2);
+    f[0] = 0x53; f[1] = 0xA2; f[2] = n & 0xFF; f[3] = (n >> 8) & 0xFF; f[4] = cmd;
+    f.set(pl, 5);
+    let sum = 0; for (let i = 0; i < 5 + pl.length; i++) sum += f[i];
+    f[5 + pl.length] = sum & 0xFF; f[6 + pl.length] = (sum >> 8) & 0xFF;
+    return f;
+  }
+
+  const cmdText = (cmd) => "0x" + cmd.toString(16).padStart(2, "0").toUpperCase();
+
+  async function apiSend(frame) {
+    const r = await fetch("/api/raw", { method: "POST", body: frame });
+    if (!r.ok) throw new Error("HTTP " + r.status + " " + (await r.text()).slice(0, 100));
+  }
+
+  async function pollApiRx() {
+    if (!API_MODE) return;
+    try {
+      const r = await fetch("/api/rx?since=" + apiRxSince, { cache: "no-store" });
+      if (!r.ok) return;
+      const j = await r.json();
+      if (typeof j.next === "number") apiRxSince = j.next;
+      for (const h of (j.frames || [])) {
+        const bytes = Uint8Array.from(h.match(/../g).map((x) => parseInt(x, 16)));
+        if (!bytes.length) continue;
+        onFrame(bytes[0], bytes.slice(1));
+      }
+    } catch (_) { /* 后端忙或未启动：静默重试 */ }
+  }
+
   function send(cmd, data) {
     const api = window.__J51NG;
-    if (!api) { setTail("app.js 未就绪"); return false; }
-    if (!api.connected()) { setTail("未连接设备"); return false; }
-    const body = new Uint8Array([cmd, ...(data || [])]);
-    api.send(cmd, body);
-    setTail("已发送 0x" + cmd.toString(16).padStart(2, "0").toUpperCase());
-    return true;
+    const frame = buildFrame(cmd, data);
+
+    if (api && api.connected()) {
+      api.send(cmd, frame)
+        .then(() => setTail("已发送 " + cmdText(cmd)))
+        .catch((e) => setTail("发送失败：" + e.message));
+      return true;
+    }
+    if (API_MODE) {
+      apiSend(frame)
+        .then(() => setTail("已发送 " + cmdText(cmd) + "（本地 API）"))
+        .catch((e) => setTail("发送失败：" + e.message));
+      return true;
+    }
+    setTail("未连接设备");
+    return false;
   }
 
   /* ---------- 初始化 ---------- */
@@ -214,6 +267,12 @@
     }
 
     render();
+
+    /* 本地 API 模式：轮询后端把 54A1 帧取回来 */
+    if (API_MODE) {
+      pollApiRx();
+      setInterval(pollApiRx, 150);
+    }
   }
 
   if (document.readyState === "loading") {

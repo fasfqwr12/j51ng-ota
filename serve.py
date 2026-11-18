@@ -272,6 +272,16 @@ class Handler(SimpleHTTPRequestHandler):
                 return self._json({**_state, "transport": "native-ble-v1", "ble": ble,
                                    "elapsed": round((_state.get("finished") or time.time()) - _state["t0"], 1) if _state["t0"] else 0,
                                    "lines": len(_lines)})
+        if u.path == "/api/rx":
+            since = int(parse_qs(u.query).get("since", ["0"])[0])
+            try:
+                frames = native_session().call("rx", timeout=10)
+            except Exception as exc:
+                return self._json({"ok": False, "err": str(exc), "frames": [], "next": since}, 200)
+            total = len(frames)
+            if since > total:
+                since = total
+            return self._json({"ok": True, "frames": frames[since:], "next": total})
         if u.path == "/api/log":
             since = int(parse_qs(u.query).get("since", ["0"])[0])
             with _lock:
@@ -300,6 +310,17 @@ class Handler(SimpleHTTPRequestHandler):
             finally:
                 with _lock:
                     _link_busy = False
+        if u.path == "/api/raw":
+            try:
+                length = int(self.headers.get("Content-Length", "0"))
+                if length <= 0 or length > 512:
+                    raise ValueError("帧长度不合法")
+                raw = self.rfile.read(length)
+                native_session().call("raw", timeout=10, payload=raw)
+                return self._json({"ok": True, "sent": len(raw)})
+            except Exception as exc:
+                log("raw 下发失败: %s" % exc, "err")
+                return self._json({"ok": False, "err": str(exc)}, 503)
         if u.path == "/api/ota":
             temporary = False
             fw = None
