@@ -1575,3 +1575,56 @@ window.ota = {
     queryStatus, validateLocalImage, parseMeta, parseStatus
   }
 };
+
+/* ============================================================
+ * 「测距板」tab 用的最小接口（src/board.js 消费）
+ *
+ * 为什么不直接把 window.ota 给它：board 只需要"发一帧 53A2 + 收 54A1"，
+ * 不该碰到升级流程的任何状态。
+ * ============================================================ */
+(() => {
+  const appSubs = [];      /* 订阅 54A1 的回调 */
+
+  window.__J51NG = {
+    /** 当前是否已连上（有可写的特征值） */
+    connected(){ return !!(server && chW); },
+
+    /** 发一帧 53A2。cmd=命令码，body=完整帧字节（含 cmd），也接受 {cmd,data} */
+    async send(cmd, body){
+      if(!(server && chW)) throw new Error("未连接设备");
+      const f = body instanceof Uint8Array ? body : appFrame(cmd, null);
+      if(chW.writeValueWithoutResponse) await chW.writeValueWithoutResponse(f);
+      else await chW.writeValue(f);
+    },
+
+    /** 订阅 54A1 帧：cb(cmd, payload) */
+    onApp(cb){
+      if(typeof cb === "function" && !appSubs.includes(cb)) appSubs.push(cb);
+    },
+
+    /** 取消订阅 */
+    offApp(cb){
+      const i = appSubs.indexOf(cb);
+      if(i >= 0) appSubs.splice(i,1);
+    },
+
+    /** 供 board.js 手工拼帧用（与内部 appFrame 完全一致） */
+    frame: appFrame,
+  };
+
+  /* 把解析器收到的 54A1 分发出去。
+   * 这里用"包一层 __metaQ"的方式而不是改解析回调，
+   * 保证升级流程原有的 __metaQ 消费逻辑完全不受影响。 */
+  const _origPush = __metaQ.push.bind(__metaQ);
+  __metaQ.push = function(...args){
+    const r = _origPush(...args);
+    for(const it of args){
+      if(it && typeof it.cmd === "number"){
+        for(const cb of appSubs){
+          try{ cb(it.cmd, it.p); }catch(_){}
+        }
+      }
+    }
+    return r;
+  };
+})();
