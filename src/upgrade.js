@@ -220,8 +220,27 @@
     $("up2Lib")?.addEventListener("click", () => loadLib());
     $("up2Go")?.addEventListener("click", () => upgradeAll());
 
-    render();
-    loadLib();
+    /* 用户只要"连接 + 对比"：连上就自动扫一次，页面打开时已连接也直接扫 */
+    $("btnConn")?.addEventListener("click", () => {
+      let n = 0;
+      const timer = setInterval(async () => {
+        n++;
+        try {
+          const st = await (await fetch("/api/status", { cache: "no-store" })).json();
+          if (st.ble && st.ble.connected) { clearInterval(timer); setTimeout(scan, 1500); }
+        } catch (e) { /* 连接期间接口可能短暂不可用，忽略 */ }
+        if (n > 25) clearInterval(timer);
+      }, 800);
+    });
+
+    (async () => {
+      try {
+        const st = await (await fetch("/api/status", { cache: "no-store" })).json();
+        if (st.ble && st.ble.connected) { await loadLib(); scan(); return; }
+      } catch (e) { /* 后端没起也不影响页面 */ }
+      render();
+      loadLib();
+    })();
   }
 
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init);
