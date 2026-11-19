@@ -36,6 +36,18 @@
 <div class="wrap" id="pane-ota">
 
   <div class="card">
+    <div class="sec"><span class="n">0</span><h2>板卡扫描与一键升级</h2><span class="tail" id="up2Tail">待扫描</span></div>
+    <div class="row" style="margin-bottom:6px">
+      <button class="primary" id="up2Scan">扫描设备</button>
+      <button id="up2Lib">刷新在线库</button>
+      <button id="up2Go" disabled>一键升级</button>
+    </div>
+    <div class="meta">设备 ID（蓝牙板 MAC）：<span id="up2Dev">—</span></div>
+    <div id="up2Table"></div>
+    <div class="hint">扫描只读，不会改任何东西；「一键升级」按 主控 → 蓝牙板 的顺序执行，蓝牙板放最后（它一升级连接就断）。</div>
+  </div>
+
+  <div class="card">
     <div class="sec"><span class="n">1</span><h2>设备</h2><span class="tail" id="tailDev">待连接</span></div>
     <div class="hero">
       <div>
@@ -232,6 +244,7 @@
 <script type="module" src="./src/app.js?v=78"></script>
 <script type="module" src="./src/board.js?v=3"></script>
 <script type="module" src="./src/rod.js?v=2"></script>
+<script type="module" src="./src/upgrade.js?v=1"></script>
 <script src="./api-live.js?v=4"></script>
 </body>
 </html>

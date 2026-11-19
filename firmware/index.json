@@ -1,47 +1,33 @@
 {
-  "updated": 1794905364,
+  "updated": 1795055614,
   "items": [
     {
       "file": "M_app_latest.bin",
       "role": "app",
       "target": "M",
       "targetName": "主控 M",
-      "title": "N2SE_M APP v6.255 crc=0x30E98912",
-      "size": 101208,
-      "fileSize": 101208,
-      "sha256": "74b30927cc0c7d521532b624126c6d60c1911df62d0e489718ae3eb2f1f15ade",
-      "version": "v6.255",
+      "title": "N2SE_M APP v1.5 crc=0xEC6711CF",
+      "size": 96644,
+      "fileSize": 96644,
+      "sha256": "fa058af4a49652b74d5baab644332f59cebaa31e46631bbd96868c00b169ccf4",
+      "version": "v1.5",
       "model": "N2SE_M",
-      "appCrc": "0x30E98912",
-      "mtime": 1794905364.0510833
-    },
-    {
-      "file": "M_app_latest.hex",
-      "role": "app",
-      "target": "M",
-      "targetName": "主控 M",
-      "title": "N2SE_M APP v6.255 crc=0x45793DD9",
-      "size": 101140,
-      "fileSize": 278188,
-      "sha256": "c650baaea86337e9d04cb1bed07be066adeedd93d03ce3e12c64e7363ce7491f",
-      "version": "v6.255",
-      "model": "N2SE_M",
-      "appCrc": "0x45793DD9",
-      "mtime": 1794902145.859318
+      "appCrc": "0xEC6711CF",
+      "mtime": 1795055058.678095
     },
     {
       "file": "S_app_latest.bin",
       "role": "app",
       "target": "S",
       "targetName": "蓝牙板 S",
-      "title": "N2SE_S APP v1.0 crc=0xC9C9A520",
-      "size": 43316,
-      "fileSize": 43316,
-      "sha256": "59beaf75472e48f0aa36b5fe28031d1213a55a9014db270b633060afaea23953",
-      "version": "v1.0",
+      "title": "N2SE_S APP v1.5 crc=0x807AA9A4",
+      "size": 45636,
+      "fileSize": 45636,
+      "sha256": "a628d4ca016e4cfec0fa2e5de7d1fac42c7306738b8e7b2a803289fcfd41a0c1",
+      "version": "v1.5",
       "model": "N2SE_S",
-      "appCrc": "0xC9C9A520",
-      "mtime": 1794890840.8526175
+      "appCrc": "0x807AA9A4",
+      "mtime": 1795055614.6782615
     }
   ]
 }

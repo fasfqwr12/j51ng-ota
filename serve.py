@@ -19,7 +19,8 @@ J51NG OTA 上位机 —— 带 API 的静态服务器（替换 python -m http.se
 调试用的 step_verify() 仍保留（pyocd 读 pc），但普通 /api/ota 不再调用它。
 """
 import concurrent.futures
-import json, os, queue, re, subprocess, sys, tempfile, threading, time, traceback, uuid
+import json
+import struct, os, queue, re, subprocess, sys, tempfile, threading, time, traceback, uuid
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlparse, parse_qs
@@ -58,6 +59,38 @@ _native = None
 _native_lock = threading.Lock()
 _link_busy = False
 
+
+def scan_firmware():
+    """扫描 firmware/ 目录，读出每个 bin 的镜像头，给上位机当"在线库"。"""
+    items = []
+    d = WEB / "firmware"
+    if not d.is_dir():
+        return items
+    for f in sorted(d.glob("*.bin")):
+        try:
+            b = f.read_bytes()[:52]
+            magic, size, fmt = struct.unpack_from("<IHH", b, 0)
+            if magic != 0x4154454D or size < 52:
+                continue
+            app_crc, code_size, load = struct.unpack_from("<III", b, 0x14)
+            fwver, hwver, vt = struct.unpack_from("<HHH", b, 0x20)
+            items.append({
+                "file": f.name,
+                "model": b[8:20].rstrip(b"\x00").decode("ascii", "ignore"),
+                "board_id": b[0x27],          # META_TARGET: 1=S, 2=M
+                "imgtype": b[0x26],           # 0=APP, 1=BOOT
+                "fw_ver": "0x%04X" % fwver,
+                "fw_major": fwver >> 8,
+                "fw_minor": fwver & 0xFF,
+                "hw_ver": "0x%04X" % hwver,
+                "app_crc": "0x%08X" % app_crc,
+                "app_crc_u32": app_crc,
+                "size": code_size,
+                "mtime": int(f.stat().st_mtime),
+            })
+        except Exception:
+            continue
+    return items
 
 def native_session():
     global _native
@@ -266,6 +299,8 @@ class Handler(SimpleHTTPRequestHandler):
 
     def do_GET(self):
         u = urlparse(self.path)
+        if u.path == "/api/manifest":
+            return self._json({"ok": True, "items": scan_firmware()})
         if u.path == "/api/status":
             ble = native_snapshot()
             with _lock:
@@ -321,6 +356,8 @@ class Handler(SimpleHTTPRequestHandler):
             except Exception as exc:
                 log("raw 下发失败: %s" % exc, "err")
                 return self._json({"ok": False, "err": str(exc)}, 503)
+        if u.path == "/api/manifest":
+            return self._json({"ok": True, "items": scan_firmware()})
         if u.path == "/api/ota":
             temporary = False
             fw = None

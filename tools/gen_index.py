@@ -136,6 +136,11 @@ def main():
     for fn in sorted(os.listdir(FW)):
         if not fn.lower().endswith((".hex", ".bin")):
             continue
+        # 同名 bin 存在时跳过 hex：同一个固件没必要在库里占两条，
+        # 而且 hex 里取镜像头不可靠（版本会读成乱值）。
+        if fn.lower().endswith(".hex") and \
+           os.path.exists(os.path.join(FW, os.path.splitext(fn)[0] + ".bin")):
+            continue
         path = os.path.join(FW, fn)
         target = "M"
         if fn.upper().startswith("S_"):
