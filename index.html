@@ -222,16 +222,16 @@
     <div id="rdGrid"></div>
 
     <div class="hint" style="margin-top:12px">
-      这张表对应设置页第 5 档「自定义 Pro」。均值/标准差单位是<b>码</b>，
-      下发时自动换算成主控要的 <b>码×2</b> 定点。
-      crc 一致就说明主控里那张表和你现在看到的是同一份。
+      这张表对应设置页第 5 档「自定义 Pro」。每支杆填<b>你打得最近 / 最远</b>多少码（不是均值、不是标准差），
+      右边会实时显示换算出来的<b>均值 ± σ</b>；公式 σ=(最远−最近)/4，覆盖约 95% 的球。
+      下发时自动换算成主控要的 <b>码×2</b> 定点，表结构没变。crc 一致就说明主控里那张表和你现在看到的是同一份。
     </div>
   </div>
 </div>
 
 <script type="module" src="./src/app.js?v=78"></script>
 <script type="module" src="./src/board.js?v=3"></script>
-<script type="module" src="./src/rod.js?v=1"></script>
+<script type="module" src="./src/rod.js?v=2"></script>
 <script src="./api-live.js?v=4"></script>
 </body>
 </html>

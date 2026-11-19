@@ -119,25 +119,54 @@
   /* ---------- UI ---------- */
   function setTail(t) { const e = $("rdTail"); if (e) e.textContent = t; }
 
+  /* 表里存的是 mean/sigma（算法要用的量），但让用户填"最近/最远"两个边界更好懂：
+   *   mean = (lo+hi)/2,   sigma = (hi-lo)/4      （覆盖 ±2σ，约 95%）
+   * 两个边界都按"码"填，×2 之后就是主控要的定点，存储格式一点没变。 */
+  function boundsOf(i) {
+    const m = meanX2[i] / 2, sg = sigX2[i] / 2;
+    return { lo: m - 2 * sg, hi: m + 2 * sg };
+  }
+
+  function setBounds(i, lo, hi) {
+    const a = Math.min(lo, hi), b = Math.max(lo, hi);
+    meanX2[i] = Math.round(a + b);                       /* (a+b)/2 × 2 */
+    sigX2[i]  = Math.max(1, Math.round((b - a) / 2));    /* (b-a)/4 × 2，至少 0.5 码，防除零 */
+  }
+
+  function fmtMeanSigma(i) {
+    return `${(meanX2[i] / 2).toFixed(1)} ± ${(sigX2[i] / 2).toFixed(1)}`;
+  }
+
   function render() {
     const grid = $("rdGrid");
     if (!grid) return;
-    grid.innerHTML = NAMES.map((n, i) => `
-      <div class="rdrow">
+    grid.innerHTML = NAMES.map((n, i) => {
+      const { lo, hi } = boundsOf(i);
+      return `
+      <div class="rdrow" data-i="${i}">
         <span class="rdname">${n}</span>
-        <input class="rdin" type="number" step="0.5" data-i="${i}" data-k="m" value="${(meanX2[i] / 2).toFixed(1)}">
+        <input class="rdin" type="number" step="1" data-k="lo" value="${lo.toFixed(1)}">
+        <span class="rdunit">~</span>
+        <input class="rdin" type="number" step="1" data-k="hi" value="${hi.toFixed(1)}">
         <span class="rdunit">码</span>
-        <input class="rdin" type="number" step="0.5" data-i="${i}" data-k="s" value="${(sigX2[i] / 2).toFixed(1)}">
-        <span class="rdunit">±</span>
-      </div>`).join("") + `
-      <div class="rdhead"><span class="rdname">杆</span><span class="rdunit">平均距离</span>
-        <span class="rdunit"></span><span class="rdunit">标准差</span><span class="rdunit"></span></div>`;
+        <span class="rdev">${fmtMeanSigma(i)}</span>
+      </div>`;
+    }).join("") + `
+      <div class="rdhead"><span class="rdname">杆</span><span class="rdunit">最近</span>
+        <span class="rdunit"></span><span class="rdunit">最远</span>
+        <span class="rdunit"></span><span class="rdunit">均值 ± σ</span></div>`;
 
     grid.querySelectorAll("input.rdin").forEach((el) => {
       el.addEventListener("change", () => {
-        const i = parseInt(el.dataset.i, 10);
-        const v = Math.round(parseFloat(el.value || "0") * 2);
-        if (el.dataset.k === "m") meanX2[i] = v; else sigX2[i] = v;
+        const row = el.closest(".rdrow");
+        const i = parseInt(row.dataset.i, 10);
+        const lo = parseFloat(row.querySelector('[data-k="lo"]').value || "0");
+        const hi = parseFloat(row.querySelector('[data-k="hi"]').value || "0");
+        setBounds(i, lo, hi);
+        const b = boundsOf(i);
+        row.querySelector('[data-k="lo"]').value = b.lo.toFixed(1);
+        row.querySelector('[data-k="hi"]').value = b.hi.toFixed(1);
+        row.querySelector(".rdev").textContent = fmtMeanSigma(i);
         updateCompare();
       });
     });
@@ -232,11 +261,12 @@
     const style = document.createElement("style");
     style.textContent = `
       #rdGrid { display:grid; gap:4px; margin-top:10px; }
-      .rdrow, .rdhead { display:grid; grid-template-columns:80px 1fr 28px 1fr 20px;
+      .rdrow, .rdhead { display:grid; grid-template-columns:70px 1fr 14px 1fr 26px 1fr;
                         align-items:center; gap:6px; }
       .rdhead { color:var(--muted,#888); font-size:11px; order:-1; }
       .rdname { font-weight:600; font-size:13px; }
       .rdunit { font-size:12px; color:var(--muted,#888); }
+      .rdev { font-size:11px; color:var(--muted,#888); white-space:nowrap; }
       .rdin { width:100%; padding:5px 7px; border:1px solid var(--line,#d8d3c4);
               border-radius:7px; background:transparent; font:inherit; text-align:right; }
       .rdbar { display:flex; gap:8px; flex-wrap:wrap; margin-top:6px; }
