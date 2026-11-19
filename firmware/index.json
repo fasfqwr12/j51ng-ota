@@ -1,21 +1,21 @@
 {
-  "updated": 1795062101,
+  "updated": 1795067852,
   "items": [
     {
       "file": "M_app_latest.bin",
       "role": "app",
       "target": "M",
       "targetName": "主控 M",
-      "title": "N2SE_M APP v1.15 crc=0x13262F10",
-      "size": 96756,
-      "fileSize": 96756,
-      "sha256": "1ddbcad3d507a4622fbd2784f8fe3e0a18688ce7b759e67609a42a52775c4c9b",
-      "version": "v1.15",
+      "title": "N2SE_M APP v1.20 crc=0xA7BF773B",
+      "size": 96856,
+      "fileSize": 96856,
+      "sha256": "3eb1ad5ae24f627c8f6ab0b638387f5797f5af5f77e7caa7a3753ad63f9454a4",
+      "version": "v1.20",
       "model": "N2SE_M",
-      "appCrc": "0x13262F10",
-      "codeSize": 96244,
+      "appCrc": "0xA7BF773B",
+      "codeSize": 96344,
       "imgType": 0,
-      "mtime": 1795062101.9575944
+      "mtime": 1795067852.7964594
     },
     {
       "file": "S_app_latest.bin",
