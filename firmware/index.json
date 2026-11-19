@@ -13,6 +13,8 @@
       "version": "v1.15",
       "model": "N2SE_M",
       "appCrc": "0x13262F10",
+      "codeSize": 96244,
+      "imgType": 0,
       "mtime": 1795062101.9575944
     },
     {
@@ -27,6 +29,8 @@
       "version": "v1.6",
       "model": "N2SE_S",
       "appCrc": "0xCDD9D77B",
+      "codeSize": 45132,
+      "imgType": 0,
       "mtime": 1795060158.9080641
     }
   ]

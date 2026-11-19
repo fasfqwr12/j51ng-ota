@@ -15,6 +15,21 @@
   const API = "";
   let rxSince = 0;
 
+  /* ---------- 链路选择 ----------
+   *   本机 serve.py（127.0.0.1/localhost）→ 走后端 /api/*
+   *   GitHub Pages 等静态站                → 走 Web Bluetooth（app.js 暴露的 window.__J51NG）
+   * 静态站没有后端进程，"网页叫服务器去连蓝牙"那条路不存在；但浏览器自己就是 BLE 客户端，
+   * 所以同一套帧格式可以在这里直接收发，两边行为保持一致。 */
+  const IS_LOCAL = ["127.0.0.1", "localhost", "[::1]", "::1"].includes(location.hostname);
+  const WB = window.__J51NG || null;
+  const wbQ = [];                        /* 公网模式收帧队列：[[code, Uint8Array]] */
+  if (!IS_LOCAL && WB) {
+    WB.onApp((cmd, pay) => {
+      wbQ.push([cmd, pay ? Uint8Array.from(pay) : new Uint8Array(0)]);
+      if (wbQ.length > 400) wbQ.shift();
+    });
+  }
+
   /* ---------- 帧收发 ---------- */
   function frame(code, payload) {
     const pl = Uint8Array.from(payload || []);
@@ -38,6 +53,11 @@
   }
 
   async function drain() {
+    if (!IS_LOCAL) {                     /* 公网：从 BLE 收帧队列取 */
+      const out = wbQ.slice();
+      wbQ.length = 0;
+      return out;
+    }
     const r = await fetch(API + "/api/rx?since=" + rxSince, { cache: "no-store" });
     if (!r.ok) return [];
     const j = await r.json();
@@ -48,11 +68,40 @@
     ]);
   }
 
+  /* 链路状态：两种链路都折成 /api/status 的形状，下游代码不用分叉 */
+  async function linkStatus() {
+    if (IS_LOCAL) {
+      try { return await (await fetch("/api/status", { cache: "no-store" })).json(); }
+      catch (e) { return null; }
+    }
+    const s = (window.ota && window.ota.status) ? window.ota.status() : {};
+    const mm = String(s.pkts || "").split("/");
+    const done = parseInt(mm[0] || "0", 10) || 0;
+    const total = parseInt(mm[1] || "0", 10) || 0;
+    const spd = parseInt(String(s.speed || "0").replace(/[^0-9]/g, ""), 10) || 0;
+    const tData = parseFloat(String((s.timings || {}).data || "0")) || 0;
+    const lg = (s.log || []).join("\n");
+    return {
+      ble: { connected: !!s.connected, busy: !!s.running, operation: null },
+      running: !!s.running,
+      stage: "",                       /* 阶段文字页面自己会写，这里不抢 */
+      ok: /升级失败/.test(lg) ? false : undefined,
+      progress: { done: done, total: total, speed: spd, retry: 0, elapsed: tData },
+    };
+  }
+
+  async function sendFrame(code, payload) {
+    const f = frame(code, payload);
+    if (IS_LOCAL) return post("/api/raw", f);
+    if (!WB || !WB.connected()) throw new Error("蓝牙未连接");
+    await WB.send(code, f);              /* __J51NG.send 直接写 GATT 特征 */
+  }
+
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
   async function ask(code, payload, want, ms) {
     await drain();                       /* 丢掉积压，避免拿到上一次的应答 */
-    await post("/api/raw", frame(code, payload));
+    await sendFrame(code, payload);
     const t0 = Date.now();
     while (Date.now() - t0 < (ms || 1500)) {
       for (const [c, p] of await drain()) {
@@ -74,12 +123,18 @@
 
   /* ---------- 扫描 ---------- */
   async function scan() {
-    try {
-      const st = await (await fetch("/api/status", { cache: "no-store" })).json();
-      if (!st.ble || !st.ble.connected) { setTail("蓝牙未连接，先点「连接蓝牙」"); return; }
-      /* 升级/连接动作进行中绝不去抢链路，否则会把 OTA 数据流搅乱 */
-      if (st.running || st.ble.busy || st.ble.operation) { setTail("设备忙（升级或连接中），先别扫描"); return; }
-    } catch (e) { setTail("后端没起，先运行 serve.py"); return; }
+    if (IS_LOCAL) {
+      try {
+        const st = await (await fetch("/api/status", { cache: "no-store" })).json();
+        if (!st.ble || !st.ble.connected) { setTail("蓝牙未连接，先点「连接蓝牙」"); return; }
+        /* 升级/连接动作进行中绝不去抢链路，否则会把 OTA 数据流搅乱 */
+        if (st.running || st.ble.busy || st.ble.operation) { setTail("设备忙（升级或连接中），先别扫描"); return; }
+      } catch (e) { setTail("后端没起，先运行 serve.py"); return; }
+    } else {
+      if (!WB || !WB.connected()) { setTail("蓝牙未连接，先点「连接蓝牙」"); return; }
+      const st = (window.ota && window.ota.status) ? window.ota.status() : {};
+      if (st.running) { setTail("设备忙（升级中），先别扫描"); return; }
+    }
     setTail("扫描中…");
     boards = []; devId = "";
     const head = await ask(0x24, [], 0x25, 2000);
@@ -118,9 +173,32 @@
 
   /* ---------- 在线库 ---------- */
   async function loadLib() {
-    const r = await fetch(API + "/api/manifest", { cache: "no-store" });
-    const j = await r.json();
-    lib = (j.items || []).filter((x) => x.imgtype === 0);   /* 只比 APP 镜像 */
+    if (IS_LOCAL) {
+      const r = await fetch(API + "/api/manifest", { cache: "no-store" });
+      const j = await r.json();
+      lib = (j.items || []).filter((x) => x.imgtype === 0);   /* 只比 APP 镜像 */
+    } else {
+      /* 静态站：直接读仓库里和 bin 一起发布的 firmware/index.json */
+      const r = await fetch("./firmware/index.json?t=" + Date.now(), { cache: "no-store" });
+      if (!r.ok) throw new Error("固件清单读取失败 HTTP " + r.status);
+      const j = await r.json();
+      lib = (j.items || [])
+        .filter((x) => (x.imgType || 0) === 0)
+        .map((x) => {
+          const m = /^v(\d+)\.(\d+)$/.exec(x.version || "");
+          const crc = parseInt(x.appCrc || "0x0", 16) >>> 0;
+          return {
+            file: x.file,
+            board_id: x.target === "S" ? 1 : x.target === "M" ? 2 : 3,
+            fw_major: m ? +m[1] : 0,
+            fw_minor: m ? +m[2] : 0,
+            app_crc: x.appCrc || "",
+            app_crc_u32: crc,
+            size: x.codeSize || x.size || 0,
+            imgtype: 0,
+          };
+        });
+    }
     render();
   }
 
@@ -197,16 +275,27 @@
       const target = b.id === 1 ? "S" : "M";
       setTail(`[${i + 1}/${list.length}] 正在升级 ${nameOf(b.id)} → ${verOf(l.fw_major, l.fw_minor)} …`);
       try {
-        const bin = await (await fetch(`/firmware/${l.file}`)).arrayBuffer();
-        const r = await post(`/api/ota?target=${target}`, bin);
-        if (!r.ok) throw new Error(r.err || "提交失败");
-        for (;;) {
-          await sleep(1500);
-          const st = await (await fetch("/api/status", { cache: "no-store" })).json();
-          if (!st.running) {
-            if (st.stage && String(st.stage).indexOf("通过") < 0 && !st.ok) throw new Error(st.stage);
-            break;
+        if (IS_LOCAL) {
+          const bin = await (await fetch(`/firmware/${l.file}`)).arrayBuffer();
+          const r = await post(`/api/ota?target=${target}`, bin);
+          if (!r.ok) throw new Error(r.err || "提交失败");
+          for (;;) {
+            await sleep(1500);
+            const st = await (await fetch("/api/status", { cache: "no-store" })).json();
+            if (!st.running) {
+              if (st.stage && String(st.stage).indexOf("通过") < 0 && !st.ok) throw new Error(st.stage);
+              break;
+            }
           }
+        } else {
+          /* 公网：交给页面自带的 OTA 流程（同样是 BLE 直连，含握手/窗口/断链重连） */
+          if (!window.ota || !window.ota.start) throw new Error("页面 OTA 模块未加载");
+          await window.ota.useUrl(`./firmware/${l.file}?t=` + Date.now());
+          window.ota.setTarget(target);
+          await window.ota.start();          /* 内部会在结束时把 running 落下来 */
+          const lg = ((window.ota.status() || {}).log || []).join("\n");
+          if (/升级失败/.test(lg)) throw new Error("设备返回失败，详见下方日志");
+          if (!/总耗时/.test(lg))  throw new Error("升级没跑完（链路可能中断）");
         }
       } catch (e) {
         setTail(`升级 ${nameOf(b.id)} 失败：${e.message}`);
@@ -358,8 +447,8 @@
       const timer = setInterval(async () => {
         n++;
         try {
-          const st = await (await fetch("/api/status", { cache: "no-store" })).json();
-          if (st.ble && st.ble.connected) { clearInterval(timer); setTimeout(scan, 1500); }
+          const st = await linkStatus();
+          if (st && st.ble && st.ble.connected) { clearInterval(timer); setTimeout(scan, 1500); }
         } catch (e) { /* 连接期间接口可能短暂不可用，忽略 */ }
         if (n > 25) clearInterval(timer);
       }, 800);
@@ -367,8 +456,8 @@
 
     (async () => {
       try {
-        const st = await (await fetch("/api/status", { cache: "no-store" })).json();
-        if (st.ble && st.ble.connected) { await loadLib(); scan(); return; }
+        const st = await linkStatus();
+        if (st && st.ble && st.ble.connected) { await loadLib(); scan(); return; }
       } catch (e) { /* 后端没起也不影响页面 */ }
       render();
       loadLib();
@@ -433,10 +522,8 @@
   }
 
   async function watchOta() {
-    let st;
-    try {
-      st = await (await fetch("/api/status", { cache: "no-store" })).json();
-    } catch (e) { return; }
+    const st = await linkStatus();
+    if (!st) return;
     const busy = !!(st.running || (st.ble && st.ble.busy));
     const p = st.progress;
     if (busy) {

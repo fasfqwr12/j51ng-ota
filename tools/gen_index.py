@@ -177,6 +177,8 @@ def main():
             "version": (meta["verText"] if meta else ("v" + m.group(1)) if m else ""),
             "model": model,
             "appCrc": ("0x%08X" % meta["appCrc"]) if meta else "",
+            "codeSize": (meta["codeSize"] if meta else (img or len(raw))),
+            "imgType": (meta["imageType"] if meta else 0),
             "mtime": os.path.getmtime(path),
         })
     items.sort(key=lambda x: (x["target"], x["title"]))
