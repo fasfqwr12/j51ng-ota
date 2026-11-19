@@ -180,6 +180,13 @@
 
   /* ---------- 一键升级 ---------- */
   async function upgradeAll() {
+    /* 开跑先把进度卡清零，避免看到上一轮的残留数字 */
+    const bar = $("bar"), pc = $("sPct"), pk = $("sPkt");
+    if (bar) bar.style.width = "0%";
+    if (pc) pc.textContent = "0.0%";
+    if (pk) pk.textContent = "0/0";
+    const ts = $("tailStage"); if (ts) ts.textContent = "准备中";
+
     const list = boards.filter((b) => verdict(b).need);
     /* 蓝牙板永远最后：它一升级蓝牙就断 */
     list.sort((a, b) => (a.id === 1 ? 1 : 0) - (b.id === 1 ? 1 : 0) || a.id - b.id);
@@ -401,6 +408,30 @@
     if (ms) s_toastTimer = setTimeout(() => { el.style.opacity = "0"; }, ms);
   }
 
+  /* 进度卡（#6）统一由这里画：不管升级是从「一键升级」还是「开始升级」发起的，
+   * 进度条/百分比/包数/速率/耗时都跟着真实状态走，结束后落到 100%。 */
+  function paintProgress(st, finished) {
+    const p = st.progress;
+    const bar = $("bar"), pc = $("sPct"), pk = $("sPkt"), sp = $("sSpd");
+    const rt = $("sRtx"), td = $("tData"), ta = $("tAll"), ts = $("tailStage");
+    if (ts && st.stage) ts.textContent = st.stage;
+    if (ta && st.elapsed !== undefined) ta.textContent = st.elapsed + " s";
+    if (!p || !p.total) {
+      if (finished && bar) {
+        bar.style.width = "100%";
+        if (pc) pc.textContent = "100.0%";
+      }
+      return;
+    }
+    const pct = finished ? 100 : Math.min(100, 100 * p.done / p.total);
+    if (bar) bar.style.width = pct + "%";
+    if (pc) pc.textContent = pct.toFixed(1) + "%";
+    if (pk) pk.textContent = `${finished ? p.total : p.done}/${p.total}`;
+    if (sp) sp.textContent = Math.round(p.speed).toLocaleString();
+    if (rt) rt.textContent = p.retry;
+    if (td) td.textContent = p.elapsed.toFixed(1) + " s";
+  }
+
   async function watchOta() {
     let st;
     try {
@@ -410,6 +441,7 @@
     const p = st.progress;
     if (busy) {
       s_wasBusy = true;
+      paintProgress(st, false);
       if (p && p.total) toast(`升级中 ${Math.min(100, 100 * p.done / p.total).toFixed(1)}%　${p.done}/${p.total} 包`, "");
       else toast("升级进行中，请不要断开…", "");
       setTail("升级进行中…");
@@ -418,6 +450,7 @@
     if (s_wasBusy) {
       s_wasBusy = false;
       const ok = st.ok === undefined ? true : !!st.ok;
+      paintProgress(st, ok);
       toast(ok ? "升级完成，正在重新扫描核对…" : "升级结束（未确认成功），重新扫描看看", ok ? "ok" : "err", 6000);
       setTail(ok ? "升级完成" : "升级未确认");
       await sleep(2000);
