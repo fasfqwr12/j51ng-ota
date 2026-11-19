@@ -36,19 +36,7 @@
 <div class="wrap" id="pane-ota">
 
   <div class="card">
-    <div class="sec"><span class="n">1</span><h2>板卡扫描与一键升级</h2><span class="tail" id="up2Tail">待扫描</span></div>
-    <div class="row" style="margin-bottom:6px">
-      <button class="primary" id="up2Scan">扫描设备</button>
-      <button id="up2Lib">刷新在线库</button>
-      <button id="up2Go" disabled>一键升级</button>
-    </div>
-    <div class="meta">设备 ID（蓝牙板 MAC）：<span id="up2Dev">—</span></div>
-    <div id="up2Table"></div>
-    <div class="hint">扫描只读，不会改任何东西；「一键升级」按 主控 → 蓝牙板 的顺序执行，蓝牙板放最后（它一升级连接就断）。</div>
-  </div>
-
-  <div class="card">
-    <div class="sec"><span class="n">2</span><h2>设备</h2><span class="tail" id="tailDev">待连接</span></div>
+    <div class="sec"><span class="n">1</span><h2>设备</h2><span class="tail" id="tailDev">待连接</span></div>
     <div class="hero">
       <div>
         <div class="big" id="hName">未连接</div>
@@ -67,6 +55,18 @@
       <dt>设备地址</dt><dd id="kId">—</dd>
     </dl>
     <div class="hint">设备在 APP 模式时会自动发送进 Boot 命令，无需手动切换。</div>
+  </div>
+
+  <div class="card">
+    <div class="sec"><span class="n">2</span><h2>板卡扫描与一键升级</h2><span class="tail" id="up2Tail">待扫描</span></div>
+    <div class="row" style="margin-bottom:6px">
+      <button class="primary" id="up2Scan">扫描设备</button>
+      <button id="up2Lib">刷新在线库</button>
+      <button id="up2Go" disabled>一键升级</button>
+    </div>
+    <div class="meta">设备 ID（蓝牙板 MAC）：<span id="up2Dev">—</span></div>
+    <div id="up2Table"></div>
+    <div class="hint">扫描只读，不会改任何东西；「一键升级」按 主控 → 蓝牙板 的顺序执行，蓝牙板放最后（它一升级连接就断）。</div>
   </div>
 
   <div class="card">
