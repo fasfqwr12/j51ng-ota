@@ -94,9 +94,9 @@
         id: d[0],
         stage: d[1],
         fw: verOf(d[2], d[3]),
-        hw: verOf(d[4], d[5]),
-        crc: (d[6] | (d[7] << 8) | (d[8] << 16) | (d[9] << 24)) >>> 0,
-        sizeKb: d[10] | (d[11] << 8),
+        hw: "",
+        crc: (d[4] | (d[5] << 8) | (d[6] << 16) | (d[7] << 24)) >>> 0,
+        size: (d[8] | (d[9] << 8) | (d[10] << 16) | (d[11] << 24)) >>> 0,
         model: m ? String.fromCharCode(...Array.from(m.slice(1, 13)).filter((c) => c >= 32 && c < 127)) : "",
         missing: false,
       });
@@ -141,14 +141,15 @@
     const rows = boards.map((b) => {
       const l = libFor(b.id);
       const v = verdict(b);
-      return `<div class="u2row">
+      const cls = v.cls === "ok" ? "eq" : (v.need ? "ne" : "");
+      return `<div class="u2row ${cls}">
         <span>${nameOf(b.id)}${b.stage === 0 ? ' <b style="color:#c47">BOOT</b>' : ""}</span>
         <span>${b.model || "—"}</span>
         <span>${b.missing ? "—" : b.fw}</span>
         <span class="u2mono">${b.missing ? "—" : hex(b.crc)}</span>
         <span>${l ? verOf(l.fw_major, l.fw_minor) : "—"}</span>
         <span class="u2mono">${l ? l.app_crc : "—"}</span>
-        <span class="${v.cls}">${v.text}</span>
+        <span class="${v.cls}"><i class="u2dot"></i>${v.text}</span>
       </div>`;
     }).join("");
 
@@ -240,7 +241,7 @@
     curEl.innerHTML = (b && !b.missing)
       ? `<div class="cl">当前 · ${nameOf(b.id)}</div>
          <div class="cv">${b.model || "?"} ${b.fw}</div>
-         <div class="cx">crc=${crc8(b.crc)} · ${b.sizeKb} KB</div>
+         <div class="cx">crc=${crc8(b.crc)} · ${b.size} B</div>
          <div class="cm">${b.stage === 0 ? "BOOT 模式" : "APP 模式"} · 从镜像头读的</div>`
       : `<div class="cl">当前 · ${t === "S" ? "蓝牙板 S" : t === "M" ? "主控 M" : t}</div>
          <div class="cv">—</div>
@@ -269,12 +270,21 @@
     }
     const sameFw = b.fw === "v" + m.verText;
     const sameCrc = (b.crc >>> 0) === (m.payloadCrc >>> 0);
-    if (sameFw && sameCrc) {
+    const sameSize = (b.size >>> 0) === (m.size >>> 0);
+    /* 一样就把两栏都标绿；不一样就把两栏标黄并说清差在哪 */
+    const eq = sameFw && sameCrc && sameSize;
+    curEl.className = "cmpcol " + (eq ? "eq" : "ne");
+    selEl.className = "cmpcol " + (eq ? "eq" : "ne");
+    if (eq) {
       vd.className = "cmpverdict ok";
       vd.textContent = "一致：这块板已经是这个固件，不用烧。";
     } else {
-      vd.className = "cmpverdict";
-      vd.textContent = `不一致：${sameFw ? "版本号相同但 CRC 不同（重新编译过）" : "版本号不同"}，需要烧。`;
+      const diff = [];
+      if (!sameFw)   diff.push(`版本 ${b.fw} ≠ ${m.verText}`);
+      if (!sameCrc)  diff.push(`CRC ${crc8(b.crc)} ≠ ${crc8(m.payloadCrc)}`);
+      if (!sameSize) diff.push(`大小 ${b.size} ≠ ${m.size} B`);
+      vd.className = "cmpverdict ne";
+      vd.textContent = `不一致（${diff.join("，")}），建议烧这个文件。`;
     }
   }
 
@@ -291,6 +301,20 @@
       .u2row .warn { color:#b4761a; font-weight:600; }
       .u2row .bad  { color:#b3352c; }
       .u2empty { color:var(--muted,#888); }
+      .u2row.eq { background:linear-gradient(90deg,#e6f4ea,#fbfdfb 75%);
+                  box-shadow:inset 3px 0 0 #3f8f57; border-radius:6px; padding-left:6px; }
+      .u2row.ne { background:linear-gradient(90deg,#fdf1cf,#fffdf7 75%);
+                  box-shadow:inset 3px 0 0 #c9a227; border-radius:6px; padding-left:6px; }
+      .u2row { animation:fadein .35s ease; }
+      @keyframes fadein { from { opacity:0; transform:translateY(-2px) } to { opacity:1; transform:none } }
+      .u2dot { display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:5px; vertical-align:1px; }
+      .ok .u2dot { background:#3f8f57; } .warn .u2dot { background:#c9a227; } .bad .u2dot { background:#b3352c; }
+      .cmpcol { transition:border-color .25s, background .25s, box-shadow .25s; }
+      .cmpcol.eq { border-color:#3f8f57; background:#f1f8f2; box-shadow:0 0 0 1px #3f8f5720 inset; }
+      .cmpcol.eq .cv { color:#2c6e42; }
+      .cmpcol.ne { border-color:#c9a227; background:#fdf8e8; }
+      .cmpcol.ne .cv { color:#8a6d10; }
+      .cmpverdict.ne { border-color:#c9a227; border-style:solid; color:#7a5f0c; background:#fdf8e8; }
     `;
     document.head.appendChild(st);
 
