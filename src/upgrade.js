@@ -77,6 +77,8 @@
     try {
       const st = await (await fetch("/api/status", { cache: "no-store" })).json();
       if (!st.ble || !st.ble.connected) { setTail("蓝牙未连接，先点「连接蓝牙」"); return; }
+      /* 升级/连接动作进行中绝不去抢链路，否则会把 OTA 数据流搅乱 */
+      if (st.running || st.ble.busy || st.ble.operation) { setTail("设备忙（升级或连接中），先别扫描"); return; }
     } catch (e) { setTail("后端没起，先运行 serve.py"); return; }
     setTail("扫描中…");
     boards = []; devId = "";
@@ -239,9 +241,21 @@
     };
   }
 
+  let _fwSig = "";
   function renderFwCompare() {
     const curEl = $("fwCur"), selEl = $("fwSel"), vd = $("fwVerdict");
     if (!curEl || !selEl) return;
+    /* 内容没变就一个字都不写，避免每秒重建 DOM 拖慢升级进度条 */
+    const sigNow = [
+      curTarget(),
+      (document.querySelector("#seg button.on") || {}).dataset ? 1 : 0,
+      (boards.find((x) => x.id === idOfTarget(curTarget())) || {}).crc || 0,
+      (window.__j5aa && window.__j5aa.payloadCrc) || 0,
+      ($("kMeta") && $("kMeta").textContent) || "",
+      ($("kFile") && $("kFile").textContent) || "",
+    ].join("|");
+    if (sigNow === _fwSig) return;
+    _fwSig = sigNow;
     const t = curTarget();
     const b = boards.find((x) => x.id === idOfTarget(t));
     const m = fileMetaFromDom();
@@ -358,9 +372,59 @@
       const el = $(id);
       if (el) new MutationObserver(renderFwCompare).observe(el, { childList: true, characterData: true, subtree: true });
     });
+    /* 目标按钮切换时重画（class 变化） */
+    const seg = $("seg");
+    if (seg) new MutationObserver(renderFwCompare).observe(seg, { subtree: true, attributes: true, attributeFilter: ["class"] });
     renderFwCompare();
-    setInterval(renderFwCompare, 1000);
   }
+
+  /* ---------- 升级状态监听：进行中有进度、结束有明确结果 ---------- */
+  let s_wasBusy = false;
+  let s_toastTimer = 0;
+
+  function toast(text, kind, ms) {
+    let el = $("up2Toast");
+    if (!el) {
+      el = document.createElement("div");
+      el.id = "up2Toast";
+      el.style.cssText = "position:fixed;right:20px;bottom:64px;z-index:99999;max-width:320px;" +
+        "padding:10px 14px;border-radius:10px;font-size:13px;line-height:1.45;" +
+        "box-shadow:0 6px 20px rgba(0,0,0,.18);transition:opacity .25s;background:#fff;color:#222;" +
+        "border:1px solid #ddd";
+      document.body.appendChild(el);
+    }
+    el.textContent = text;
+    el.style.opacity = "1";
+    el.style.background = kind === "ok" ? "#e8f5ea" : kind === "err" ? "#fdeceb" : "#fdf8e8";
+    el.style.borderColor = kind === "ok" ? "#3f8f57" : kind === "err" ? "#b3352c" : "#c9a227";
+    clearTimeout(s_toastTimer);
+    if (ms) s_toastTimer = setTimeout(() => { el.style.opacity = "0"; }, ms);
+  }
+
+  async function watchOta() {
+    let st;
+    try {
+      st = await (await fetch("/api/status", { cache: "no-store" })).json();
+    } catch (e) { return; }
+    const busy = !!(st.running || (st.ble && st.ble.busy));
+    const p = st.progress;
+    if (busy) {
+      s_wasBusy = true;
+      if (p && p.total) toast(`升级中 ${Math.min(100, 100 * p.done / p.total).toFixed(1)}%　${p.done}/${p.total} 包`, "");
+      else toast("升级进行中，请不要断开…", "");
+      setTail("升级进行中…");
+      return;
+    }
+    if (s_wasBusy) {
+      s_wasBusy = false;
+      const ok = st.ok === undefined ? true : !!st.ok;
+      toast(ok ? "升级完成，正在重新扫描核对…" : "升级结束（未确认成功），重新扫描看看", ok ? "ok" : "err", 6000);
+      setTail(ok ? "升级完成" : "升级未确认");
+      await sleep(2000);
+      if (st.ble && st.ble.connected) scan(); else render();
+    }
+  }
+  setInterval(watchOta, 1200);
 
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init);
   else init();
