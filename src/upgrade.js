@@ -64,7 +64,7 @@
   }
 
   /* ---------- 状态 ---------- */
-  let boards = [];        /* [{id, stage, fw, hw, crc, sizeKb, model}] */
+  let boards = [];        /* [{id, stage, fw, crc, size, model}] */
   let lib = [];           /* /api/manifest items */
   let devId = "";
 
@@ -74,6 +74,10 @@
 
   /* ---------- 扫描 ---------- */
   async function scan() {
+    try {
+      const st = await (await fetch("/api/status", { cache: "no-store" })).json();
+      if (!st.ble || !st.ble.connected) { setTail("蓝牙未连接，先点「连接蓝牙」"); return; }
+    } catch (e) { setTail("后端没起，先运行 serve.py"); return; }
     setTail("扫描中…");
     boards = []; devId = "";
     const head = await ask(0x24, [], 0x25, 2000);
@@ -96,7 +100,12 @@
         fw: verOf(d[2], d[3]),
         hw: "",
         crc: (d[4] | (d[5] << 8) | (d[6] << 16) | (d[7] << 24)) >>> 0,
-        size: (d[8] | (d[9] << 8) | (d[10] << 16) | (d[11] << 24)) >>> 0,
+        /* 新固件在 [8..11] 放精确字节数；老固件 [8..9] 是硬件版本、[10..11] 是 KB。
+         * 读出来明显不合理（0 或超过 16 MB）就按老格式换算。 */
+        size: (() => {
+          const v = (d[8] | (d[9] << 8) | (d[10] << 16) | (d[11] << 24)) >>> 0;
+          return (v > 0 && v < 16 * 1024 * 1024) ? v : ((d[10] | (d[11] << 8)) * 1024);
+        })(),
         model: m ? String.fromCharCode(...Array.from(m.slice(1, 13)).filter((c) => c >= 32 && c < 127)) : "",
         missing: false,
       });
