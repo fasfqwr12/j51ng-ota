@@ -438,9 +438,8 @@ function applyStatus(st){
   const who = st.model ? `${st.model} (${st.deviceId})` : "旧固件(型号未知)";
   $("kHw").textContent = st.mode==="boot" ? `${who} · Boot` : who;
   $("kVer").textContent = st.metaValid ? `${(st.fwVersion>>8)&0xFF}.${st.fwVersion&0xFF}` : "—";
-  $("kMeta").textContent = st.metaValid
-    ? `${st.versionText||""} · 容量 ${st.capacity} B`
-    : "无镜像头信息";
+  /* 注意：kMeta 属于「固件」卡，显示的是"选中的文件"的镜像头，
+   * 不能被设备状态刷新覆盖，否则选了 M 文件却显示 S 板的版本。 */
   $("hMeta").textContent = st.mode==="boot"
     ? `Boot 模式 · ${who} · 可直接升级${st.resetPend?" · 已排定复位":""}`
     : `APP 模式 · ${st.versionText || `v${(st.fwVersion>>8)&0xFF}.${st.fwVersion&0xFF}`}`;

@@ -200,6 +200,84 @@
     await scan();
   }
 
+
+  /* ---------- 固件卡：左=这块板现在跑的，右=你选的固件 ---------- */
+  function curTarget() {
+    const b = document.querySelector("#seg button.on");
+    return b ? (b.dataset.t || "M") : "M";
+  }
+  const idOfTarget = (t) => (t === "S" ? 1 : t === "M" ? 2 : -1);
+  const crc8 = (n) => "0x" + (n >>> 0).toString(16).toUpperCase().padStart(8, "0");
+
+
+  /* 选中文件的镜像头：优先用 app.js 解析好的全局对象，拿不到就从
+   * 「元数据」那一行文本反解——两边字段一致，避免跨模块耦合出问题。 */
+  function fileMetaFromDom() {
+    const g = window.__j5aa;
+    if (g && g.model) return g;
+    const el = $("kMeta");
+    const txt = el ? el.textContent || "" : "";
+    const r = txt.match(/^(APP|BOOT)\s*·\s*(.+?)\s*→\s*(.+?)\s*·\s*v([\d.]+)\s*·\s*代码区\s*(\d+)\s*B\s*·\s*crc\s*([0-9A-Fa-f]{8})/);
+    if (!r) return null;
+    return {
+      imageType: r[1] === "APP" ? 0 : 1,
+      model: r[2],
+      target: r[3].indexOf("主控") >= 0 ? 2 : r[3].indexOf("蓝牙") >= 0 ? 1 : 0,
+      verText: r[4],
+      size: parseInt(r[5], 10),
+      payloadCrc: parseInt(r[6], 16),
+    };
+  }
+
+  function renderFwCompare() {
+    const curEl = $("fwCur"), selEl = $("fwSel"), vd = $("fwVerdict");
+    if (!curEl || !selEl) return;
+    const t = curTarget();
+    const b = boards.find((x) => x.id === idOfTarget(t));
+    const m = fileMetaFromDom();
+    const fname = ($("kFile") && $("kFile").textContent) || "";
+
+    curEl.innerHTML = (b && !b.missing)
+      ? `<div class="cl">当前 · ${nameOf(b.id)}</div>
+         <div class="cv">${b.model || "?"} ${b.fw}</div>
+         <div class="cx">crc=${crc8(b.crc)} · ${b.sizeKb} KB</div>
+         <div class="cm">${b.stage === 0 ? "BOOT 模式" : "APP 模式"} · 从镜像头读的</div>`
+      : `<div class="cl">当前 · ${t === "S" ? "蓝牙板 S" : t === "M" ? "主控 M" : t}</div>
+         <div class="cv">—</div>
+         <div class="cm">先点上面「扫描设备」</div>`;
+
+    selEl.innerHTML = m
+      ? `<div class="cl">选中 · ${fname || "文件"}</div>
+         <div class="cv">${m.model || "?"} v${m.verText}</div>
+         <div class="cx">crc=${crc8(m.payloadCrc)} · ${m.size} B</div>
+         <div class="cm">${m.imageType === 0 ? "APP" : "BOOT"} · 指向 ${m.target === 2 ? "主控 M" : m.target === 1 ? "蓝牙板 S" : "?"}</div>`
+      : `<div class="cl">选中 · 文件</div>
+         <div class="cv">—</div>
+         <div class="cm">从在线库点「选用」，或把 bin 拖进来</div>`;
+
+    if (!vd) return;
+    if (!b || b.missing || !m) {
+      vd.className = "cmpverdict dim";
+      vd.textContent = "左边是这块板现在跑的，右边是你选的固件。两边都有数据才给结论。";
+      return;
+    }
+    const want = idOfTarget(t);
+    if (m.target && m.target !== want) {
+      vd.className = "cmpverdict";
+      vd.textContent = `选错板了：这个文件是给${m.target === 2 ? "主控 M" : "蓝牙板 S"}的，当前目标选的是${t === "M" ? "主控 M" : "蓝牙板 S"}。`;
+      return;
+    }
+    const sameFw = b.fw === "v" + m.verText;
+    const sameCrc = (b.crc >>> 0) === (m.payloadCrc >>> 0);
+    if (sameFw && sameCrc) {
+      vd.className = "cmpverdict ok";
+      vd.textContent = "一致：这块板已经是这个固件，不用烧。";
+    } else {
+      vd.className = "cmpverdict";
+      vd.textContent = `不一致：${sameFw ? "版本号相同但 CRC 不同（重新编译过）" : "版本号不同"}，需要烧。`;
+    }
+  }
+
   /* ---------- 初始化 ---------- */
   function init() {
     const st = document.createElement("style");
@@ -241,6 +319,14 @@
       render();
       loadLib();
     })();
+
+    /* 文件/元数据一被写入就立刻重画右栏，不用等轮询 */
+    ["kMeta", "kFile", "kSize"].forEach((id) => {
+      const el = $(id);
+      if (el) new MutationObserver(renderFwCompare).observe(el, { childList: true, characterData: true, subtree: true });
+    });
+    renderFwCompare();
+    setInterval(renderFwCompare, 1000);
   }
 
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init);
