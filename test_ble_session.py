@@ -29,6 +29,8 @@ class FakeHost:
         self.raw_log = bytearray()
         self.closes = 0
         self.connections = 0
+        self._on_notify = None      # ble_session 会包一层收 notify，测试桩要有这个属性
+        self.wr = None
         self.__class__.instances.append(self)
 
     async def connect(self, timeout=6):

@@ -25,6 +25,9 @@ class NativeBleSession:
         # ---- 测距板（53A2/54A1）通道：与 OTA 共用同一条 BLE 连接 ----
         self.app_rx = bytearray()   # 所有 notify 原始字节
         self._frames = []           # 已解析出的 54A1 帧（hex 字符串）
+        self._rx_base = 0           # 已被裁掉的老帧数量：绝对序号 = _rx_base + 下标
+                                    # 没有它，列表一截断客户端 since 就会错位，
+                                    # 表现就是"重复帧"和"该来的应答丢了"
         self.thread.start()
         self._monitor_future = asyncio.run_coroutine_threadsafe(self._monitor(), self.loop)
 
@@ -103,7 +106,9 @@ class NativeBleSession:
         if i:
             del buf[:i]
         if len(self._frames) > 4000:
-            del self._frames[:-2000]
+            drop = len(self._frames) - 2000
+            del self._frames[:drop]
+            self._rx_base += drop   # 裁掉多少，绝对起点就前移多少（序号永不回退）
         return self._frames
 
     async def _query(self):
@@ -144,7 +149,8 @@ class NativeBleSession:
             return True
         if operation == "rx":
             self._pump_app_frames()
-            return list(self._frames)
+            # 带上绝对起点：客户端用绝对序号取增量，截断后不会读到错位的旧帧
+            return {"base": self._rx_base, "frames": list(self._frames)}
         if operation == "fault":
             import ota_ble_s
             if not host.client or not host.client.is_connected:

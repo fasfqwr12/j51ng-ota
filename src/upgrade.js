@@ -99,15 +99,19 @@
 
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-  async function ask(code, payload, want, ms) {
-    await drain();                       /* 丢掉积压，避免拿到上一次的应答 */
-    await sendFrame(code, payload);
-    const t0 = Date.now();
-    while (Date.now() - t0 < (ms || 1500)) {
-      for (const [c, p] of await drain()) {
-        if (c === want) return p;
+  /* retry>0 时超时重发。单次丢帧不再等于"这块板扫不到"。 */
+  async function ask(code, payload, want, ms, retry) {
+    const tries = 1 + (retry || 0);
+    for (let t = 0; t < tries; t++) {
+      await drain();                     /* 丢掉积压，避免拿到上一次的应答 */
+      await sendFrame(code, payload);
+      const t0 = Date.now();
+      while (Date.now() - t0 < (ms || 1500)) {
+        for (const [c, p] of await drain()) {
+          if (c === want) return p;
+        }
+        await sleep(80);
       }
-      await sleep(80);
     }
     return null;
   }
@@ -122,7 +126,13 @@
   const hex = (n, w) => "0x" + (n >>> 0).toString(16).toUpperCase().padStart(w || 8, "0");
 
   /* ---------- 扫描 ---------- */
+  let scanning = false;                 /* 连点两下会跑两轮交叉写 boards，必须挡住 */
   async function scan() {
+    if (scanning) return;
+    scanning = true;
+    try { await scanOnce(); } finally { scanning = false; }
+  }
+  async function scanOnce() {
     if (IS_LOCAL) {
       try {
         const st = await (await fetch("/api/status", { cache: "no-store" })).json();
@@ -137,22 +147,43 @@
     }
     setTail("扫描中…");
     boards = []; devId = "";
-    const head = await ask(0x24, [], 0x25, 2000);
+    /* 扫描本身偶尔漏板（主控那条总线有时抢不到），连扫两轮取并集；
+     * 单轮丢应答也不再用一次超时判死刑。 */
+    let head = await ask(0x24, [], 0x25, 2500, 1);
     if (!head) { setTail("扫描超时（蓝牙板无应答）"); render(); return; }
 
-    const count = head[0];
     /* BLE 地址在固件里是小端存的，显示时反过来才和手机/系统里看到的一致 */
     devId = Array.from(head.slice(2, 8)).reverse()
       .map((b) => b.toString(16).padStart(2, "0").toUpperCase()).join(":");
-    const ids = [1];
-    for (let i = 0; i < count; i++) if (head[8 + i]) ids.push(head[8 + i]);
+
+    const idSet = new Set([1]);            /* 1 = 蓝牙板 S 自己，先占位 */
+    const mergeHead = (h) => {
+      if (!h) return;
+      /* 固件给的是个数，最多 8 个槽；越界一律不信，防止把脏字节当板号 */
+      const n = Math.min(h[0] || 0, 8);
+      for (let i = 0; i < n; i++) {
+        const v = h[8 + i];
+        if (v >= 1 && v <= 8) idSet.add(v);   /* Set 天然去重：不会再出现两块同名板 */
+      }
+    };
+    mergeHead(head);
+    const head2 = await ask(0x24, [], 0x25, 2500, 0);
+    if (head2) mergeHead(head2);
+    else setTail("第二轮扫描无应答，按第一轮结果继续…");
+
+    /* 扫描刚结束时主控那条总线还在收尾，立刻发 0x20 容易撞车 */
+    await sleep(150);
+
+    const ids = Array.from(idSet).sort((a, b) => a - b);
 
     for (const id of ids) {
-      const d = await ask(0x20, [id], 0x21, 1200);
-      const m = await ask(0x22, [id], 0x23, 1200);
+      /* 先给足时间，超时再重发一次；两块板不会因为一次丢帧就一好一坏 */
+      const d = await ask(0x20, [id], 0x21, 2000, 1);
+      const m = d ? await ask(0x22, [id], 0x23, 2000, 1) : null;
       if (!d) { boards.push({ id, missing: true }); continue; }
       boards.push({
-        id: d[0],
+        /* 板自己回的 id 也要校验：回 0 或越界就沿用请求的 id，别多出一行怪板 */
+        id: (d[0] >= 1 && d[0] <= 8) ? d[0] : id,
         stage: d[1],
         fw: verOf(d[2], d[3]),
         hw: "",

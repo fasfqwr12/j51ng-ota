@@ -310,13 +310,23 @@ class Handler(SimpleHTTPRequestHandler):
         if u.path == "/api/rx":
             since = int(parse_qs(u.query).get("since", ["0"])[0])
             try:
-                frames = native_session().call("rx", timeout=10)
+                got = native_session().call("rx", timeout=10)
             except Exception as exc:
                 return self._json({"ok": False, "err": str(exc), "frames": [], "next": since}, 200)
-            total = len(frames)
+            # 帧带绝对序号：base 是会话里已被裁掉的老帧数量。
+            # 老写法用 len(frames) 当序号，缓冲一截断序号就回退，
+            # 客户端会重复读到旧帧（表现为板卡重复）或跳过新应答（表现为扫描无应答）。
+            if isinstance(got, dict):
+                base = int(got.get("base", 0))
+                frames = list(got.get("frames", []))
+            else:                                  # 老会话对象，保持兼容
+                base, frames = 0, list(got)
+            total = base + len(frames)
+            if since < base:
+                since = base                      # 落后太多：从最老的还在的开始，不重复不跳过
             if since > total:
                 since = total
-            return self._json({"ok": True, "frames": frames[since:], "next": total})
+            return self._json({"ok": True, "frames": frames[since - base:], "next": total})
         if u.path == "/api/log":
             since = int(parse_qs(u.query).get("since", ["0"])[0])
             with _lock:
