@@ -116,6 +116,64 @@
     return null;
   }
 
+  /* 一次发多条同码命令，把所有应答按 want 码收上来（扫描流水线用）。
+   * 收齐之后还有 160 ms 安静期就直接返回，不硬耗满超时。 */
+  async function askAll(code, payloads, want, ms) {
+    const got = [];
+    await drain();
+    for (const p of payloads) {
+      await sendFrame(code, p);
+      await sleep(60);                 /* 命令之间留点间隔，别挤成一坨把链路冲垮 */
+    }
+    const t0 = Date.now();
+    let quiet = 0;
+    while (Date.now() - t0 < (ms || 2000)) {
+      let any = false;
+      for (const [c, p] of await drain()) {
+        if (c === want) { got.push(p); any = true; }
+      }
+      if (any) quiet = 0; else quiet++;
+      if (got.length >= payloads.length && quiet >= 2) break;
+      await sleep(80);
+    }
+    return got;
+  }
+
+  /* 把 0x21 / 0x23 两条应答拼成一行板卡数据 */
+  function boardFrom(id, d, m) {
+    return {
+      /* 板自己回的 id 也要校验：回 0 或越界就沿用请求的 id，别多出一行怪板 */
+      id: (d[0] >= 1 && d[0] <= 8) ? d[0] : id,
+      stage: d[1],
+      fw: verOf(d[2], d[3]),
+      hw: "",
+      crc: (d[4] | (d[5] << 8) | (d[6] << 16) | (d[7] << 24)) >>> 0,
+      /* 新固件在 [8..11] 放精确字节数；老固件 [8..9] 是硬件版本、[10..11] 是 KB。
+       * 读出来明显不合理（0 或超过 16 MB）就按老格式换算。 */
+      size: (() => {
+        const v = (d[8] | (d[9] << 8) | (d[10] << 16) | (d[11] << 24)) >>> 0;
+        return (v > 0 && v < 16 * 1024 * 1024) ? v : ((d[10] | (d[11] << 8)) * 1024);
+      })(),
+      model: m ? String.fromCharCode(...Array.from(m.slice(1, 13)).filter((c) => c >= 32 && c < 127)) : "",
+      missing: false,
+    };
+  }
+
+  /* 单块板重试：只重读这一行，不用整轮重扫 */
+  async function retryOne(id) {
+    if (scanning) return;
+    setTail(`重试 板卡 ${id} …`);
+    const d = await ask(0x20, [id], 0x21, 2000, 1);
+    if (!d) { setTail(`板卡 ${id} 仍然无应答`); return; }
+    const m = await ask(0x22, [id], 0x23, 1500, 1);
+    const row = boardFrom(id, d, m);
+    const at = boards.findIndex((b) => b.id === id);
+    if (at >= 0) boards[at] = row; else boards.push(row);
+    setTail(`板卡 ${id} 已读回`);
+    render();
+  }
+
+
   /* ---------- 状态 ---------- */
   let boards = [];        /* [{id, stage, fw, crc, size, model}] */
   let lib = [];           /* /api/manifest items */
@@ -130,7 +188,13 @@
   async function scan() {
     if (scanning) return;
     scanning = true;
-    try { await scanOnce(); } finally { scanning = false; }
+    const btn = $("up2Scan");
+    if (btn) { btn.disabled = true; btn.classList.add("scanning"); btn.textContent = "扫描中…"; }
+    try { await scanOnce(); }
+    finally {
+      scanning = false;
+      if (btn) { btn.disabled = false; btn.classList.remove("scanning"); btn.textContent = "扫描设备"; }
+    }
   }
   async function scanOnce() {
     if (IS_LOCAL) {
@@ -176,29 +240,41 @@
 
     const ids = Array.from(idSet).sort((a, b) => a - b);
 
-    for (const id of ids) {
-      /* 先给足时间，超时再重发一次；两块板不会因为一次丢帧就一好一坏 */
-      const d = await ask(0x20, [id], 0x21, 2000, 1);
-      const m = d ? await ask(0x22, [id], 0x23, 2000, 1) : null;
-      if (!d) { boards.push({ id, missing: true }); continue; }
-      boards.push({
-        /* 板自己回的 id 也要校验：回 0 或越界就沿用请求的 id，别多出一行怪板 */
-        id: (d[0] >= 1 && d[0] <= 8) ? d[0] : id,
-        stage: d[1],
-        fw: verOf(d[2], d[3]),
-        hw: "",
-        crc: (d[4] | (d[5] << 8) | (d[6] << 16) | (d[7] << 24)) >>> 0,
-        /* 新固件在 [8..11] 放精确字节数；老固件 [8..9] 是硬件版本、[10..11] 是 KB。
-         * 读出来明显不合理（0 或超过 16 MB）就按老格式换算。 */
-        size: (() => {
-          const v = (d[8] | (d[9] << 8) | (d[10] << 16) | (d[11] << 24)) >>> 0;
-          return (v > 0 && v < 16 * 1024 * 1024) ? v : ((d[10] | (d[11] << 8)) * 1024);
-        })(),
-        model: m ? String.fromCharCode(...Array.from(m.slice(1, 13)).filter((c) => c >= 32 && c < 127)) : "",
-        missing: false,
-      });
+    /* 流水线：0x20 全部发出去再统一收。原来是每块板"发一条等满超时"，
+     * 板少也要按 板数×2 条命令 串着等；现在只等一轮。 */
+    const info = new Map();
+    for (const p of await askAll(0x20, ids.map((id) => [id]), 0x21, 2200)) {
+      const bid = p[0];
+      if (bid >= 1 && bid <= 8 && !info.has(bid)) info.set(bid, p);
     }
-    setTail(`扫描完成：${boards.length} 块板`);
+    /* 这一轮没回来的单独补发一次，不让一次丢帧变成"这块板不存在" */
+    for (const id of ids) {
+      if (info.has(id)) continue;
+      const d = await ask(0x20, [id], 0x21, 2000, 1);
+      if (d) info.set(id, d);
+    }
+    /* 型号同样走流水线 */
+    const alive = ids.filter((id) => info.has(id));
+    const mods = new Map();
+    if (alive.length) {
+      for (const p of await askAll(0x22, alive.map((id) => [id]), 0x23, 1800)) {
+        const bid = p[0];
+        if (bid >= 1 && bid <= 8 && !mods.has(bid)) mods.set(bid, p);
+      }
+      for (const id of alive) {
+        if (mods.has(id)) continue;
+        const m = await ask(0x22, [id], 0x23, 1500, 1);
+        if (m) mods.set(id, m);
+      }
+    }
+
+    for (const id of ids) {
+      const d = info.get(id);
+      if (!d) { boards.push({ id, missing: true }); continue; }
+      boards.push(boardFrom(id, d, mods.get(id) || null));
+    }
+    const left = boards.filter((b) => b.missing).length;
+    setTail(`扫描完成：${boards.length} 块板` + (left ? `（${left} 块无应答，可点「重试」单独再读）` : ""));
     render();
   }
 
@@ -223,6 +299,7 @@
             board_id: x.target === "S" ? 1 : x.target === "M" ? 2 : 3,
             fw_major: m ? +m[1] : 0,
             fw_minor: m ? +m[2] : 0,
+            model: x.model || "",
             app_crc: x.appCrc || "",
             app_crc_u32: crc,
             size: x.codeSize || x.size || 0,
@@ -242,6 +319,11 @@
     if (b.missing) return { text: "无应答", cls: "bad", need: false };
     const l = libFor(b.id);
     if (!l) return { text: "库里没有这块板的固件", cls: "warn", need: false };
+    /* 型号必须一致：不同机型万一 CRC 撞了会误判"已是最新"，
+     * 型号对不上就一律不给升级（刷错比不刷更糟）。 */
+    const lm = String(l.model || "").trim().toUpperCase();
+    const bm = String(b.model || "").trim().toUpperCase();
+    if (lm && bm && lm !== bm) return { text: `型号不符（库是 ${l.model}）`, cls: "bad", need: false };
     const sameVer = (b.fw === verOf(l.fw_major, l.fw_minor));
     const sameCrc = (b.crc === l.app_crc_u32);
     if (sameVer && sameCrc) return { text: "已是最新", cls: "ok", need: false };
@@ -269,11 +351,20 @@
         <span class="u2mono">${b.missing ? "—" : hex(b.crc)}</span>
         <span>${l ? verOf(l.fw_major, l.fw_minor) : "—"}</span>
         <span class="u2mono">${l ? l.app_crc : "—"}</span>
-        <span class="${v.cls}"><i class="u2dot"></i>${v.text}</span>
+        <span class="${v.cls}"><i class="u2dot"></i>${v.text}${
+          b.missing ? ` <button class="ghost u2retry" data-retry="${b.id}">重试</button>` : ""}</span>
       </div>`;
     }).join("");
 
     box.innerHTML = head + (rows || `<div class="u2row u2empty">点「扫描设备」开始</div>`);
+
+    if (!box._retryBound) {                 /* 容器常驻，事件委托只挂一次 */
+      box._retryBound = true;
+      box.addEventListener("click", (e) => {
+        const btn = e.target.closest("[data-retry]");
+        if (btn) { e.preventDefault(); retryOne(+btn.dataset.retry); }
+      });
+    }
 
     const need = boards.filter((b) => verdict(b).need).length;
     const btn = $("up2Go");

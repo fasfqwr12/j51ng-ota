@@ -230,3 +230,10 @@ button.soft{background:transparent}
 
 /* hidden 属性优先级：.dock 用了 position:fixed，默认 display 会盖掉 hidden */
 .dock[hidden]{display:none !important}
+
+/* 扫描进行中：按钮转圈 + 重试小按钮（2026-11-20） */
+#up2Scan.scanning::before{content:"";display:inline-block;width:9px;height:9px;margin-right:6px;
+  border:2px solid currentColor;border-top-color:transparent;border-radius:50%;
+  animation:up2spin .7s linear infinite;vertical-align:-1px}
+@keyframes up2spin{to{transform:rotate(360deg)}}
+.u2retry{padding:1px 6px;margin-left:4px;font-size:11px;line-height:1.3}
