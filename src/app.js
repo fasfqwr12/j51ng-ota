@@ -114,13 +114,18 @@ async function connect(){
   if(LOCAL_API) return apiLink("connect");
   if(running || apiRunning || apiRemote) return;
   try{
-    if(apiAvailable && (await apiRequest("/api/status")).running) throw new Error("服务端正在使用蓝牙");
+    /* ★ requestDevice 必须"同步"落在用户点击里：这之前不能有任何 await，
+     *   否则 Chrome 判为没有用户手势，选择框不弹、Promise 一直挂着，
+     *   页面就永远停在"请求中…"（2026-11-21 实测就是这个）。 */
     __userDisc=false; __cancelled=false;
     chip("请求中…","work");
-    device = await navigator.bluetooth.requestDevice({
+    if(!navigator.bluetooth){
+      throw new Error("这个浏览器没有 Web Bluetooth：请用 Chrome/Edge，并且必须是 https 页面");
+    }
+    device = await withTimeout(navigator.bluetooth.requestDevice({
       filters:[{namePrefix:"AIMTECH"},{namePrefix:"J51NG"}],
       optionalServices:[SVC]
-    });
+    }), 30000, "选择设备");
     device.addEventListener("gattserverdisconnected", onDisconnect);
     await gatt();
     $("hName").textContent = device.name || "(无名设备)";
@@ -133,7 +138,14 @@ async function connect(){
     refreshGo();
   }catch(e){
     chip("未连接","");
-    log("连接失败："+e.message,"err");
+    /* 把这几种最常见的失败翻成人话，别只丢一个英文 name */
+    const why =
+      e.name==="NotFoundError"      ? "没有选择设备（选择框被关掉或附近没有广播）" :
+      e.name==="SecurityError"      ? "浏览器要求从点击动作发起：请再点一次「连接蓝牙」" :
+      e.name==="InvalidStateError"  ? "已经有一个选择框开着，先把它关掉再点" :
+      e.name==="NotSupportedError"  ? "当前环境不支持 Web Bluetooth（需 https + Chrome/Edge）" :
+      e.message;
+    log("连接失败："+why,"err");
     // 失败也要释放链路，否则设备一直被占用、不再广播
     try{ device?.gatt?.disconnect(); }catch(_){}
     device=null;
