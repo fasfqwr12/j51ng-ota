@@ -237,3 +237,36 @@ button.soft{background:transparent}
   animation:up2spin .7s linear infinite;vertical-align:-1px}
 @keyframes up2spin{to{transform:rotate(360deg)}}
 .u2retry{padding:1px 6px;margin-left:4px;font-size:11px;line-height:1.3}
+
+/* ============================================================
+ * 手机端（2026-11-21）：要能直接拿手机打开用
+ *   - 杆包 6 列表格在窄屏放不下 -> 改成两行：名称+区间，第二行放"均值±σ"
+ *   - 升级页 7 列板卡表 -> 卡片内横向滑动，不压缩到看不清
+ *   - 底部操作栏、tab 允许换行
+ * ============================================================ */
+@media (max-width:560px){
+  .wrap{padding:0 10px}
+  .topbar .inner{padding:8px 10px;gap:8px}
+  .tabs .inner{padding:8px 10px;gap:6px;flex-wrap:wrap}
+  .tab{padding:7px 12px;font-size:13px}
+
+  /* 杆包：两行式。用 #rdGrid 前缀压过 rod.js 运行时注入的 .rdrow 规则 */
+  #rdGrid .rdhead{display:none}
+  #rdGrid .rdrow{grid-template-columns:52px 1fr 10px 1fr auto;gap:5px}
+  #rdGrid .rdrow .rdev{grid-column:1 / -1;text-align:right;font-size:10.5px}
+  #rdGrid .rdin{font-size:16px;padding:6px 5px}   /* ≥16px：iOS 聚焦时不会自动放大 */
+  #rdGrid .rdunit{font-size:11px}
+
+  /* 升级页板卡表：横向滑动，保持列宽 */
+  #up2Table{overflow-x:auto;-webkit-overflow-scrolling:touch}
+  #up2Table .u2row{min-width:560px}
+  #up2Table .u2row.u2empty{min-width:0;display:block;text-align:left}   /* 空提示不要跟着表格拉宽 */
+
+  /* 底部操作栏：按钮均分、允许换行 */
+  .dock .inner{flex-wrap:wrap;padding:8px 10px}
+  .dock .inner > *{flex:1 1 auto;min-width:104px}
+  .btn{padding:9px 12px;font-size:13px}
+
+  .kv{grid-template-columns:76px 1fr;font-size:12px}
+  .stats{grid-template-columns:repeat(2,1fr)}
+}
