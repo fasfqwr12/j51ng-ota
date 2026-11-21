@@ -30,6 +30,16 @@
   const API_MODE = ["127.0.0.1", "localhost", "[::1]", "::1"].includes(location.hostname);
   let rxSince = 0;
 
+  /* 网页版（Web Bluetooth 直连）下 0x15 回帧走 api.onApp 通知，
+   * 不经过后端 /api/rx —— 必须自己收一份，否则读取永远超时。
+   * 本地 API 模式下 BLE 归后端所有，这条通道不启用。 */
+  let btRx = [];
+  function onBtFrame(code, payload) {
+    if (code !== 0x15) return;
+    btRx.push([code, payload instanceof Uint8Array ? payload : new Uint8Array(payload)]);
+    if (btRx.length > 32) btRx.shift();     /* 只留最近 32 帧，防跑飞 */
+  }
+
   /* ---------- CRC16-CCITT（初值 0xFFFF，多项式 0x1021）---------- */
   function crc16(u8) {
     let c = 0xFFFF;
@@ -81,8 +91,9 @@
     /* 本地 API 模式下 BLE 归后端所有，浏览器的 api.connected() 不可信，
      * 必须先判 API_MODE（和 board.js 的 send 保持一致）。 */
     const api = window.__J51NG;
-    if (!API_MODE && api && typeof api.connected === "function" && api.connected()) {
-      return api.send(0, f);
+    if (!API_MODE) {
+      if (api && typeof api.connected === "function" && api.connected()) return api.send(0, f);
+      throw new Error("未连接设备（先点「连接蓝牙」）");   /* 网页版没有后端，别去打 /api/raw */
     }
     const r = await fetch("/api/raw", { method: "POST", body: f });
     if (!r.ok) throw new Error("HTTP " + r.status + " " + (await r.text()).slice(0, 80));
@@ -90,6 +101,7 @@
   }
 
   async function drain() {
+    if (!API_MODE) { const a = btRx; btRx = []; return a; }   /* 网页版：取本地缓存的 0x15 */
     const r = await fetch("/api/rx?since=" + rxSince, { cache: "no-store" });
     if (!r.ok) return [];
     const j = await r.json();
@@ -290,7 +302,22 @@
     $("rdDefault")?.addEventListener("click", loadDefault);
     $("rdErase")?.addEventListener("click", erase);
 
-    if (API_MODE) drain();   /* 把游标推到当前末尾，避免重放旧帧 */
+    if (API_MODE) {
+      drain();   /* 把游标推到当前末尾，避免重放旧帧 */
+    } else {
+      /* 网页版：订阅 Web Bluetooth 通知（0x15 回帧从这里来） */
+      const api0 = window.__J51NG;
+      if (api0 && typeof api0.onApp === "function") {
+        api0.onApp(onBtFrame);
+      } else {
+        let n = 0;
+        const t = setInterval(() => {
+          const a = window.__J51NG;
+          if (a && typeof a.onApp === "function") { a.onApp(onBtFrame); clearInterval(t); }
+          else if (++n > 50) clearInterval(t);
+        }, 100);
+      }
+    }
   }
 
   if (document.readyState === "loading") {
