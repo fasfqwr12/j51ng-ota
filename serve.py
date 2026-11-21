@@ -159,7 +159,7 @@ def set_stage(s, ok=None):
 # ---------------- 闭环步骤 ----------------
 
 def wait_advertising(max_s=25):
-    """每秒扫 1 s，直到看到 AIMTECH 广播或超时。"""
+    """每秒扫 1 s，直到看到 N2SE-1000J 广播（旧名 AIMTECH / J51NG 兼容）或超时。"""
     import asyncio
     from bleak import BleakScanner
 
@@ -169,7 +169,8 @@ def wait_advertising(max_s=25):
             try:
                 devs = await BleakScanner.discover(timeout=1.0, return_adv=True)
                 hit = [a for a, (d, adv) in devs.items()
-                       if (d.name or adv.local_name or "").upper().startswith("AIMTECH")]
+                       if any((d.name or adv.local_name or "").upper().startswith(p)
+                            for p in ("N2SE-1000J", "AIMTECH", "J51NG"))]
                 if hit:
                     log(f"[1/4] 第 {i} s 看到广播（{hit[0]}）")
                     return True

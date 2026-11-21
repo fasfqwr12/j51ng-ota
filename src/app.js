@@ -123,17 +123,34 @@ async function connect(){
       throw new Error("这个浏览器没有 Web Bluetooth：请用 Chrome/Edge，并且必须是 https 页面");
     }
     device = await withTimeout(navigator.bluetooth.requestDevice({
-      filters:[{namePrefix:"AIMTECH"},{namePrefix:"J51NG"}],
+      /* 2026-11-21：型号名统一为 N2SE-1000J（同型号所有设备相同），
+       * 个体区分靠连上后 0x24 读回的 MAC，不靠名字。
+       * 旧名 AIMTECH / J51NG 保留在过滤里：现场还没刷的板子照样能连上。 */
+      filters:[{namePrefix:"N2SE-1000J"},{namePrefix:"AIMTECH"},{namePrefix:"J51NG"}],
       optionalServices:[SVC]
     }), 30000, "选择设备");
     device.addEventListener("gattserverdisconnected", onDisconnect);
     await gatt();
     $("hName").textContent = device.name || "(无名设备)";
-    $("hMeta").textContent = "已连接，正在识别模式…";
-    $("kId").textContent = device.id.slice(0,17);
+    $("hMeta").textContent = "已连接，正在读设备 ID…";
+    $("kId").textContent = "读取中…";
     $("btnDisc").disabled=false; $("btnProbe").disabled=false;
     chip("已连接","on");
     log("已连接 "+device.name,"ok");
+
+    /* 设备 ID 只认 0x24 回的 MAC：先拿到身份，再谈其它。
+     * 拿不到（旧固件）才退回浏览器给的 device.id，并标明"未校准"。 */
+    const did = await readDeviceId(1500);
+    if(did){
+      devMac = did.mac;
+      $("kId").textContent = did.mac;
+      try{ localStorage.setItem("j51ng-device-mac", did.mac); }catch(_){}
+    }else{
+      devMac = "";
+      $("kId").textContent = device.id.slice(0,17) + "（未校准）";
+      log("设备没有回 0x24（旧固件），暂用浏览器标识，不能跨浏览器识别","dim");
+    }
+    $("hMeta").textContent = "已连接，正在识别模式…";
     await probeMode();
     refreshGo();
   }catch(e){
@@ -526,6 +543,7 @@ async function sha256(u8){
 
 /* ---------------- APP 层命令（53A2 / 54A1） ---------------- */
 let __metaQ = [];          /* 收到的 54A1 应答 */
+let devMac = "";           /* 设备 ID：0x24 回的 MAC，连上后才有；空 = 未校准 */
 
 function appFrame(cmd, payload){
   const pl = payload || new Uint8Array(0);
@@ -554,6 +572,37 @@ async function readDeviceMeta(ms=3000){
       const pl=__metaQ.splice(i,1)[0].p;
       if(pl.length < 48) return {none:true};      /* 旧镜像，无头 */
       return parseMeta(pl, 0);
+    }
+    await sleep(30);
+  }
+  return null;
+}
+
+/* ---------------- 设备 ID（0x24 → 0x25） ----------------
+ * 2026-11-21：设备 ID 统一来自设备自己回的 MAC，不从浏览器/系统拿。
+ *   - 网页版 Web Bluetooth 拿不到真实 MAC（device.id 是浏览器生成的 UUID）
+ *   - 本地后端能拿到 device.address，但那是系统侧的，不如设备自报可靠
+ * 所以"扫描阶段"的标识只用于挑候选，连上后一律用这里的值覆盖。
+ * 返回 "4B:AC:00:15:39:33" 形式；无应答返回 null（旧固件）。 */
+async function readDeviceId(ms=1500){
+  __metaQ = __metaQ.filter(x=>x.cmd!==0x25);
+  const f = appFrame(0x24, null);
+  try{
+    if(chW.writeValueWithoutResponse) await chW.writeValueWithoutResponse(f);
+    else await chW.writeValue(f);
+  }catch(e){ log("读设备 ID 下发失败："+e.message,"dim"); return null; }
+  const t0=Date.now();
+  while(Date.now()-t0<ms){
+    const i=__metaQ.findIndex(x=>x.cmd===0x25);
+    if(i>=0){
+      const pl=__metaQ.splice(i,1)[0].p;
+      if(pl.length < 8) return null;
+      /* payload: count(1) model(1) mac[6] idlist...；MAC 小端存储，反转显示 */
+      const mac = Array.from(pl.slice(2,8)).reverse()
+        .map(b=>b.toString(16).padStart(2,"0").toUpperCase()).join(":");
+      const model = pl[1];
+      log(`设备 ID = ${mac}（机型 ${model}）`,"ok");
+      return {mac, model, count:pl[0]};
     }
     await sleep(30);
   }
@@ -1436,7 +1485,7 @@ window.ota = {
     if(!navigator.bluetooth.getDevices) throw new Error("浏览器不支持 getDevices");
     const devs = await navigator.bluetooth.getDevices();
     if(!devs.length) throw new Error("没有已授权的设备，请手动点一次「连接蓝牙」");
-    device = devs.find(d=>/AIMTECH|J51NG/i.test(d.name||"")) || devs[0];
+    device = devs.find(d=>/N2SE-1000J|AIMTECH|J51NG/i.test(d.name||"")) || devs[0];
     device.addEventListener("gattserverdisconnected", onDisconnect);
     await gatt();
     $("hName").textContent = device.name || "(已授权设备)";
@@ -1502,14 +1551,14 @@ window.ota = {
        重复请求只会让 chooser 空列表或把现有连接踢掉。直接复用现有连接。 */
     if(device && device.gatt && device.gatt.connected && chW && chN){
       const m = await probeModeOnly(1200);
-      log(`复用现有连接（${device.name||"AIMTECH VHR"}）→ ${modeTxt(m)}`,"ok");
+      log(`复用现有连接（${device.name||"N2SE-1000J"}）→ ${modeTxt(m)}`,"ok");
       setBadge(m); return m;
     }
     /* 已授权设备：用 getDevices() 直接连，不弹 chooser */
     if(navigator.bluetooth.getDevices){
       try{
         const devs = await navigator.bluetooth.getDevices();
-        const d = devs.find(x=>/AIMTECH|J51NG/i.test(x.name||"")) || devs[0];
+        const d = devs.find(x=>/N2SE-1000J|AIMTECH|J51NG/i.test(x.name||"")) || devs[0];
         if(d){
           device = d;
           device.addEventListener("gattserverdisconnected", onDisconnect);
