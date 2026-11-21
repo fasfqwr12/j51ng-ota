@@ -636,6 +636,48 @@ EB 90 03 03 ...   NACK —— 从该 seq 重发</div></div>
     链路要走两跳：<b>本页 → 副板 → 主控</b>。副板只做搬运，判断全在主控。
   </div>
 
+  <h2>先搞清楚这张表是干什么的</h2>
+
+  <div class="tip">
+    <b>一句话：</b>「自定义杆」= 把 <b>第 5 档球手模型</b> 换成你自己的击球距离。<br>
+    主控推荐用哪根杆，靠的就是这张表；标歪了，推荐就歪。
+  </div>
+
+  <table>
+    <thead><tr><th>档位</th><th>名字</th><th>均值/标准差从哪来</th></tr></thead>
+    <tbody>
+      <tr><td>0</td><td>男士专业</td><td>固件里的常量表</td></tr>
+      <tr><td>1</td><td>男士标准</td><td>固件里的常量表</td></tr>
+      <tr><td>2</td><td>女士专业</td><td>固件里的常量表</td></tr>
+      <tr><td>3</td><td>女士标准</td><td>固件里的常量表</td></tr>
+      <tr><td><b>4（第 5 档）</b></td><td><b>自定义 Pro</b></td><td><b>就是这 68 字节表</b>，存 flash <code>0x0801D000</code></td></tr>
+    </tbody>
+  </table>
+
+  <div class="field"><b>主控怎么用它：</b></div>
+  <p>
+    拿到一个目标距离 <code>target</code>，在 <code>target ± 5 码</code> 的区间里，
+    用每根杆的 <code>mean ± sigma</code> 正态分布算一个「打进这个区间的概率」，
+    <b>概率最高的那根就是推荐杆</b>。所以 <code>mean</code> 是"这根杆一般打多远"，
+    <code>sigma</code> 是"这根杆我打得有多飘"——飘得大，同样距离的概率就低。
+  </p>
+
+  <div class="warn">
+    <b>第 5 档不是永远可用。</b>表没写过、CRC 对不上、或上电校验失败时，
+    主控会判第 5 档无效（<code>level_valid()</code>）并回落到常量表。
+    这是保护：宁可推荐个通用的，也不用一张坏表乱推。
+  </div>
+
+  <div class="field"><b>13 根杆 ≠ 面板上的全部杆号：</b></div>
+  <p>
+    数据表只有 13 根杆有模型，它们对应面板上的 13 个杆名：
+    <code>DRIVER→W1</code>、<code>3W→W3</code>、<code>5W→W5</code>、<code>H4→H4</code>、
+    <code>4I→I4</code>、<code>5I→I5</code>、<code>6I→I6</code>、<code>7I→I7</code>、
+    <code>8I→I8</code>、<code>9I→I9</code>、<code>PW→PW</code>、<code>GW→GW</code>、<code>SW→SW</code>。<br>
+    面板上还有 <b>W7 / H3 / H5 / LW</b> 四个杆号<b>没有模型</b>——既不能在「自定义杆」里标定，
+    也不会被推荐算法选中。这是数据表本身的定义，不是这里漏了。
+  </p>
+
   <div class="flow">
     <div class="phase">下发链路（本页 → 副板 → 主控）</div>
     <div class="fnode"><span class="fn-h">1</span><span class="fn-t">0x0D 分三片写进副板暂存区</span>
@@ -704,7 +746,7 @@ EB 90 03 03 ...   NACK —— 从该 seq 重发</div></div>
       <p class="note"><b>CRC：</b>CRC16-CCITT，<b>初值 <code>0xFFFF</code>，多项式 <code>0x1021</code></b>，
       覆盖<b>整个 68 字节</b>（算之前把偏移 6、7 置 0），结果按<b>小端</b>写回偏移 6、7。</p>
 
-      <div class="field"><b>13 支杆的顺序与出厂默认值（mean×2 / sigma×2）：</b></div>
+      <div class="field"><b>13 支杆的顺序与默认值（mean×2 / sigma×2）——默认就是「男士标准」那一行：</b></div>
       <table>
         <thead><tr><th>#</th><th>杆</th><th>默认 mean×2</th><th>默认 sigma×2</th><th>#</th><th>杆</th><th>默认 mean×2</th><th>默认 sigma×2</th></tr></thead>
         <tbody>
@@ -728,10 +770,12 @@ EB 90 03 03 ...   NACK —— 从该 seq 重发</div></div>
     <div class="step-b">
       <div class="line"><div class="lbl">界面</div><div>点「下发到主控」→「下发中 1/3 → 2/3 → 3/3 → 提交中…」→「下发成功 · 校验一致」。</div></div>
       <div class="line"><div class="lbl">内部</div><div>
-        <b>先分三片写进副板暂存区</b>（每片间隔 450 ms），三片都收下后再发<b>提交命令</b>。<br>
-        副板收到提交后，用 Modbus 把 68 字节写成三帧 FC16：
-        <code>0x2000</code>(14 寄存器) / <code>0x200E</code>(14) / <code>0x201C</code>(6)，
-        再写 <code>0x1080</code> 命令字，最后读 <code>0x1050</code> 拿校验结果。</div></div>
+        <b>先分三片写进副板暂存区</b>（每片间隔 450 ms，按<b>字节</b>切：28 + 28 + 12 = 68），
+        三片都收下后再发<b>提交命令</b>。<br>
+        副板收到提交后，用 Modbus 把同一份 68 字节写成三帧 FC16——但 Modbus 一根寄存器是
+        <b>16 位 = 2 字节</b>，所以这里按<b>寄存器</b>切：<code>0x2000</code>(14 个) /
+        <code>0x200E</code>(14 个) / <code>0x201C</code>(6 个)，共 <b>34 个寄存器 = 68 字节</b>。<br>
+        最后写 <code>0x1080</code> 命令字，再读 <code>0x1050</code> 拿校验结果。</div></div>
 
       <div class="line"><div class="lbl tx">发</div><div class="hex txb">片1 53 A2 22 00 0D 00 00 1C &lt;28 字节&gt; 40 01
 片2 53 A2 22 00 0D 1C 00 1C &lt;28 字节&gt; 5C 01
