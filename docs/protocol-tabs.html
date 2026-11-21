@@ -467,19 +467,342 @@ EB 90 03 03 ...   NACK —— 从该 seq 重发</div></div>
 
 <!-- ==================== 状态与距离上报 ==================== -->
 <section id="report" hidden>
-  <div class="placeholder">
-    <b>待写</b>
-    按同样格式：流程图（设备主动推哪些帧）→ 每条帧完整 hex → 字段解与单位换算 → 链路保活。
+
+  <div class="lead">
+    <b>这一页以「看」为主。</b>连上以后副板自己往上发，不需要你轮询；
+    只有下面那几个按钮才发帧。距离 / 坡度 / 高差单位都是 <b>dm（0.1 m）</b>，
+    页面上除以 10 显示成 m。<br>
+    上行帧头固定 <code>54 A1</code>，格式和 <code>53 A2</code> 一样：
+    <code>54 A1 | len(2,小端) | code | payload | sum(2,小端)</code>。
   </div>
+
+  <h2>流程总览</h2>
+
+  <div class="flow">
+    <div class="phase">状态与距离上报 · 3 段</div>
+
+    <div class="fnode go"><span class="fn-h">1</span><span class="fn-t">连上就自动收</span>
+      <div class="fn-d">电量 <code>0x06</code> · 雷达状态 <code>0x0B</code> · 模式 <code>0x0C</code>　<b>不用发帧</b></div></div>
+    <div class="farrow"><span>副板持续上报</span></div>
+
+    <div class="fnode go"><span class="fn-h">2</span><span class="fn-t">一次击球结算</span>
+      <div class="fn-d">一组 <code>0x07</code> → <code>0x08</code> → <code>0x09</code> → <code>0x0C</code>，外加 <code>0x0A</code> 推荐杆</div></div>
+    <div class="farrow"><span>想手动控制</span></div>
+
+    <div class="fnode wait"><span class="fn-h">3</span><span class="fn-t">手动下发</span>
+      <div class="fn-d">推荐杆 <code>0x09</code> · 唤醒/休眠 <code>0x03</code> · 查连接 <code>0x05</code> · 查版本 <code>0x0A</code></div></div>
+
+    <div class="fbranch">这页<b>没有轮询</b>——副板是主动推的。App 只管收帧 + 解析，别自己定时去问。</div>
+  </div>
+
+  <!-- ============ ① ============ -->
+  <h2>① 连上就自动收：常驻上报</h2>
+
+  <div class="step">
+    <div class="step-h"><span class="no">1</span>常驻上报<span class="tag">不需要发帧</span></div>
+    <div class="step-b">
+
+      <div class="line"><div class="lbl">界面</div><div>
+        设备信息区里「电量 / 雷达 / 模式」这三项，连上几秒内会自己出现数值。</div></div>
+
+      <div class="line"><div class="lbl">内部</div><div>
+        副板主循环每 10 ms 一拍，<b>每拍最多只发一帧</b>（发多了会把 BLE 通道刷满，
+        把 <code>0x07</code>/<code>0x08</code>/<code>0x09</code> 和别的应答都挤掉）。<br>
+        电量：<b>变了立刻发</b>，没变就 <b>1 秒</b>发一次。<br>
+        雷达状态：唤醒 / 休眠 / 查连接时各回一帧。<br>
+        模式：每次结算随那一组一起发。</div></div>
+
+      <div class="line"><div class="lbl rx">收</div><div class="hex rxb">54 A1 04 00 06 03 02 01        ← 0x06 电量 = 3（满 4）
+54 A1 04 00 0B 01 05 01        ← 0x0B 雷达 = 1（开）
+54 A1 04 00 0C 01 06 01        ← 0x0C 模式 = 1（两点距）</div></div>
+
+      <table>
+        <thead><tr><th>code</th><th>长度</th><th>字段</th><th>取值</th></tr></thead>
+        <tbody>
+          <tr><td><code>0x06</code></td><td>1 B</td><td>电量</td><td>0 ~ 4，4 = 满</td></tr>
+          <tr><td><code>0x0B</code></td><td>1 B</td><td>雷达状态</td><td>0 = 关，1 = 开</td></tr>
+          <tr><td><code>0x0C</code></td><td>1 B</td><td><b>测量模式</b></td><td><b>0 = 单点距离，1 = 两点距</b></td></tr>
+        </tbody>
+      </table>
+
+      <p class="note"><b>为什么 <code>0x0C</code> 必须收：</b><code>0x07</code> 里装的到底是「到目标的直线距离」
+      还是「A 点到 B 点两点距」，<b>只有 <code>0x0C</code> 说得清</b>。同一个 <code>0x07</code>，
+      模式不同含义完全不同。</p>
+    </div>
+  </div>
+
+  <!-- ============ ② ============ -->
+  <h2>② 一次击球：一组 5 帧</h2>
+
+  <div class="step">
+    <div class="step-h"><span class="no">2</span>测量结果<span class="tag">主控结算后自动推</span></div>
+    <div class="step-b">
+
+      <div class="line"><div class="lbl">界面</div><div>
+        主显的大数字（距离/两点距）、坡度、高差、推荐杆一起刷新。</div></div>
+
+      <div class="line"><div class="lbl">内部</div><div>
+        主控算完一次，把结果写进 <code>0x1040</code> 寄存器池；副板发现「直线距离 &gt; 0」就把
+        四个值锁存下来，然后<b>按固定顺序一拍发一帧</b>，发完清标志等下一次结算。<br>
+        顺序是 <b><code>0x07</code> → <code>0x08</code> → <code>0x09</code> → <code>0x0C</code></b>。
+        推荐杆 <code>0x0A</code> 是另一条路：副板拿距离去问主控要推荐，回帧单独发。</div></div>
+
+      <div class="line"><div class="lbl rx">收</div><div class="hex rxb">54 A1 05 00 07 9A 00 9B 01    ← 0x07 距离    = 0x009A = 154 dm = 15.4 m
+54 A1 05 00 08 03 00 05 01    ← 0x08 坡度    = 3 dm = 0.3 m
+54 A1 05 00 09 02 00 05 01    ← 0x09 垂直高差 = 2 dm = 0.2 m（单点模式恒为 0）
+54 A1 04 00 0C 01 06 01       ← 0x0C 模式    = 1 两点距
+54 A1 05 00 0A 09 00 0D 01    ← 0x0A 推荐杆  = 0x0009 = I4</div></div>
+
+      <table>
+        <thead><tr><th>code</th><th>长度</th><th>字段</th><th>单位 / 换算</th></tr></thead>
+        <tbody>
+          <tr><td><code>0x07</code></td><td>2 B 小端</td><td>直线距离 / 两点距</td><td><b>dm</b>，除以 10 得米</td></tr>
+          <tr><td><code>0x08</code></td><td>2 B 小端</td><td>坡度（高差）</td><td><b>dm</b>，除以 10 得米</td></tr>
+          <tr><td><code>0x09</code></td><td>2 B 小端</td><td>垂直高差</td><td><b>dm</b>；单点模式恒为 0</td></tr>
+          <tr><td><code>0x0C</code></td><td>1 B</td><td>模式</td><td>0 = 单点，1 = 两点</td></tr>
+          <tr><td><code>0x0A</code></td><td>2 B 小端</td><td>推荐杆号</td><td>见下方杆号表，<code>0xEF</code> = 无推荐</td></tr>
+        </tbody>
+      </table>
+
+      <p class="note"><b>坑：</b>第一次连上时，<code>0x07</code> 可能<b>先于</b>任何一帧 <code>0x0C</code> 到达。
+      这时别默认按「单点」显示，<b>先标「模式未知」</b>，等 <code>0x0C</code> 到了再定性。
+      反过来，如果你把单点距离当成两点距报给用户，读数会差一截。</p>
+    </div>
+  </div>
+
+  <!-- ============ ③ ============ -->
+  <h2>③ 手动下发</h2>
+
+  <div class="step">
+    <div class="step-h"><span class="no">3</span>下发区<span class="tag">区块 B「下发」</span></div>
+    <div class="step-b">
+
+      <div class="line"><div class="lbl">界面</div><div>
+        下拉选杆 +「下发推荐杆」、「唤醒」、「休眠」、「查连接」、「查版本」，
+        下面还有一个「发送」用来手敲任意 hex。</div></div>
+
+      <div class="line"><div class="lbl tx">发</div><div class="hex txb">53 A2 03 00 0A 02 01              ← 查版本（无 payload）
+53 A2 04 00 09 09 0B 01           ← 下发推荐杆 = 0x09 (I4)
+53 A2 04 00 03 01 FD 00           ← 唤醒  (0x03 payload=01)
+53 A2 04 00 03 02 FE 00           ← 休眠  (0x03 payload=02)
+53 A2 04 00 05 01 FF 00           ← 查连接(0x05 payload=01)</div></div>
+
+      <table>
+        <thead><tr><th>按钮</th><th>cmd</th><th>payload</th><th>副板动作</th><th>应答</th></tr></thead>
+        <tbody>
+          <tr><td>下发推荐杆</td><td><code>0x09</code></td><td>杆号 1 B</td><td>写主控寄存器「推荐杆 / 杆号」</td><td>无</td></tr>
+          <tr><td>唤醒</td><td><code>0x03</code></td><td><code>01</code></td><td>雷达状态置 1，清主控关机计数</td><td><code>0x0B</code></td></tr>
+          <tr><td>休眠</td><td><code>0x03</code></td><td><code>02</code></td><td>雷达状态置 0，置主控关机计数</td><td><code>0x0B</code></td></tr>
+          <tr><td>查连接</td><td><code>0x05</code></td><td><code>01</code></td><td>置「蓝牙已连」上报位，回一帧雷达状态</td><td><code>0x0B</code></td></tr>
+          <tr><td>查版本</td><td><code>0x0A</code></td><td>无</td><td>回构建日期码</td><td><code>0x13</code></td></tr>
+        </tbody>
+      </table>
+
+      <div class="line"><div class="lbl rx">收</div><div class="hex rxb">54 A1 07 00 13 01 0E 08 26 4C 01    ← 0x13 构建码 4 字节</div></div>
+
+      <div class="warn">
+        <b><code>0x03</code> 不是「蓝牙省电开关」。</b>它改的是<b>雷达</b>的休眠/唤醒标志
+        （顺带清/置主控的关机计数），代码里真正的雷达电源 <code>LIDAR_POWER_ON/OFF</code>
+        目前是注释掉的。<b><code>0x0A</code> 回的也不是 <code>vX.YY</code></b>——
+        那是 4 字节构建日期码，真版本要走 <code>0x20 → 0x21</code>（见「OTA 升级」页第②步）。
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ 杆号 ============ -->
+  <h2>杆号对照表（<code>0x09</code> 与 <code>0x0A</code> 共用）</h2>
+
+  <table>
+    <thead><tr><th>值</th><th>杆</th><th>值</th><th>杆</th><th>值</th><th>杆</th></tr></thead>
+    <tbody>
+      <tr><td><code>0x00</code></td><td>W1</td><td><code>0x08</code></td><td>I3</td><td><code>0x10</code></td><td>AM GW</td></tr>
+      <tr><td><code>0x01</code></td><td>W3</td><td><code>0x09</code></td><td>I4</td><td><code>0x11</code></td><td>SW</td></tr>
+      <tr><td><code>0x02</code></td><td>W5</td><td><code>0x0A</code></td><td>I5</td><td><code>0x12</code></td><td>LW</td></tr>
+      <tr><td><code>0x03</code></td><td>W7</td><td><code>0x0B</code></td><td>I6</td><td><code>0x13</code></td><td>AW</td></tr>
+      <tr><td><code>0x04</code></td><td>H3</td><td><code>0x0C</code></td><td>I7</td><td><code>0x14</code></td><td>Pt</td></tr>
+      <tr><td><code>0x05</code></td><td>H4</td><td><code>0x0D</code></td><td>I8</td><td><code>0xEF</code></td><td><b>无推荐</b></td></tr>
+      <tr><td><code>0x06</code></td><td>H5</td><td><code>0x0E</code></td><td>I9</td><td>—</td><td>—</td></tr>
+      <tr><td><code>0x07</code></td><td>H6</td><td><code>0x0F</code></td><td>PW</td><td>—</td><td>—</td></tr>
+    </tbody>
+  </table>
+
 </section>
 
 <!-- ==================== 自定义杆 ==================== -->
 <section id="rod" hidden>
-  <div class="placeholder">
-    <b>待写</b>
-    按同样格式：流程图（读状态 → 三片下发 → 提交 → 轮询 → 比对）→ 每条帧完整 hex →
-    68 字节表结构与 CRC 算法 → 每个应答码分支。
+
+  <div class="lead">
+    <b>这里下发的是「推荐杆表」</b>——13 支杆各一个均值和一个标准差，共 68 字节。<br>
+    链路要走两跳：<b>本页 → 副板 → 主控</b>。副板只做搬运，判断全在主控。
   </div>
+
+  <div class="flow">
+    <div class="phase">下发链路（本页 → 副板 → 主控）</div>
+    <div class="fnode"><span class="fn-h">1</span><span class="fn-t">0x0D 分三片写进副板暂存区</span>
+      <div class="fn-d">68 字节 = 28 + 28 + 12，每片间隔 450 ms</div></div>
+    <div class="farrow"><span>三片都收下</span></div>
+    <div class="fnode"><span class="fn-h">2</span><span class="fn-t">0x0E 提交（cmd=1）</span>
+      <div class="fn-d">副板开始用 Modbus 写主控</div></div>
+    <div class="farrow"><span>副板内部：三帧 FC16 + 一帧 FC06</span></div>
+    <div class="fnode"><span class="fn-h">3</span><span class="fn-t">主控算 CRC / 擦页 / 写 / 回读</span>
+      <div class="fn-d">写 0x2000 / 0x200E / 0x201C，提交命令字 0x1080</div></div>
+    <div class="farrow"><span>副板 FC03 读 0x1050</span></div>
+    <div class="fnode go"><span class="fn-h">4</span><span class="fn-t">0x15 回帧（6 字节）</span>
+      <div class="fn-d"><code>ack · valid · ver · count · crc16</code></div></div>
+    <div class="fbranch">主控 600 ms 没回 → 副板再要一次，还没有才回 <code>0xE1</code>。别当成立刻失败。</div>
+  </div>
+
+  <!-- ============ ① ============ -->
+  <h2>① 读取主控当前表</h2>
+
+  <div class="step">
+    <div class="step-h"><span class="no">1</span>读取主控状态<span class="tag">区块 A</span></div>
+    <div class="step-b">
+      <div class="line"><div class="lbl">界面</div><div>点「读取主控状态」→ 底部显示「主控：v1 13 杆 crc=0x____」或「主控：无自定义表」。</div></div>
+      <div class="line"><div class="lbl">内部</div><div>
+        先发 <code>0x0E</code> 命令 <code>04</code>（只读状态，<b>不写数据</b>），
+        然后每 180 ms 发一次 <code>0x0F</code> 去取结果，最多等 4 s。</div></div>
+
+      <div class="line"><div class="lbl tx">发</div><div class="hex txb">53 A2 04 00 0E 04 0B 01     ← 0x0E 命令 = 04（查状态）
+53 A2 03 00 0F 07 01        ← 0x0F 取结果（轮询）</div></div>
+
+      <div class="line"><div class="lbl rx">收</div><div class="hex rxb">54 A1 09 00 15 04 01 01 0D 34 12 6A 01</div></div>
+
+      <p class="note"><b>判据：</b><code>valid = 0</code> 就说明主控里没有自定义表，
+      界面要显示「无自定义表 → 需要下发」，不能当成读取失败。</p>
+    </div>
+  </div>
+
+  <!-- ============ ② ============ -->
+  <h2>② 编辑：68 字节表结构</h2>
+
+  <div class="step">
+    <div class="step-h"><span class="no">2</span>表结构<span class="tag">纯前端，不发帧</span></div>
+    <div class="step-b">
+      <div class="line"><div class="lbl">界面</div><div>
+        13 行，每行填「最近 ~ 最远」两个边界（单位：码），右边显示换算出来的「均值 ± σ」。</div></div>
+      <div class="line"><div class="lbl">内部</div><div>
+        表里存的是算法要的 <code>mean</code> 和 <code>sigma</code>，不是边界。换算关系：<br>
+        <code>mean = (最近 + 最远) / 2</code>，<code>sigma = (最远 − 最近) / 4</code>（覆盖 ±2σ，约 95%）。<br>
+        两者都<b>按「码 × 2」定点存</b>，所以界面上填 240 码，存进去是 480。</div></div>
+
+      <table>
+        <thead><tr><th>偏移·长度</th><th>字段</th><th>说明</th></tr></thead>
+        <tbody>
+          <tr><td>0 · 1B</td><td><code>'G'</code></td><td>固定 <code>0x47</code></td></tr>
+          <tr><td>1 · 1B</td><td><code>'R'</code></td><td>固定 <code>0x52</code></td></tr>
+          <tr><td>2 · 1B</td><td>ver</td><td>表版本，当前 <code>1</code></td></tr>
+          <tr><td>3 · 1B</td><td>count</td><td>杆数，当前 <code>13</code></td></tr>
+          <tr><td>4 · 1B</td><td>tol</td><td>容差，当前 <code>5</code></td></tr>
+          <tr><td>5 · 1B</td><td>保留</td><td><code>0</code></td></tr>
+          <tr><td>6 · 2B</td><td><b>crc16</b></td><td>小端；<b>算的时候先把这两位填 0</b></td></tr>
+          <tr><td>8 · 8B</td><td>保留</td><td>整表先填 <code>0xFF</code>，与主控 <code>cr_default()</code> 一致</td></tr>
+          <tr><td>16 · 52B</td><td>13 × { mean, sigma }</td><td>每个 <code>int16 / uint16</code> 小端，单位「码 × 2」</td></tr>
+        </tbody>
+      </table>
+
+      <p class="note"><b>CRC：</b>CRC16-CCITT，<b>初值 <code>0xFFFF</code>，多项式 <code>0x1021</code></b>，
+      覆盖<b>整个 68 字节</b>（算之前把偏移 6、7 置 0），结果按<b>小端</b>写回偏移 6、7。</p>
+
+      <div class="field"><b>13 支杆的顺序与出厂默认值（mean×2 / sigma×2）：</b></div>
+      <table>
+        <thead><tr><th>#</th><th>杆</th><th>默认 mean×2</th><th>默认 sigma×2</th><th>#</th><th>杆</th><th>默认 mean×2</th><th>默认 sigma×2</th></tr></thead>
+        <tbody>
+          <tr><td>0</td><td>DRIVER</td><td>480</td><td>24</td><td>7</td><td>7I</td><td>260</td><td>38</td></tr>
+          <tr><td>1</td><td>3W</td><td>420</td><td>28</td><td>8</td><td>8I</td><td>230</td><td>40</td></tr>
+          <tr><td>2</td><td>5W</td><td>390</td><td>30</td><td>9</td><td>9I</td><td>200</td><td>42</td></tr>
+          <tr><td>3</td><td>H4</td><td>360</td><td>32</td><td>10</td><td>PW</td><td>180</td><td>44</td></tr>
+          <tr><td>4</td><td>4I</td><td>320</td><td>34</td><td>11</td><td>GW</td><td>156</td><td>46</td></tr>
+          <tr><td>5</td><td>5I</td><td>300</td><td>36</td><td>12</td><td>SW</td><td>130</td><td>50</td></tr>
+          <tr><td>6</td><td>6I</td><td>280</td><td>36</td><td>—</td><td>—</td><td>—</td><td>—</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ============ ③ ============ -->
+  <h2>③ 下发：三片 + 提交</h2>
+
+  <div class="step">
+    <div class="step-h"><span class="no">3</span>下发到主控<span class="tag">区块 B</span></div>
+    <div class="step-b">
+      <div class="line"><div class="lbl">界面</div><div>点「下发到主控」→「下发中 1/3 → 2/3 → 3/3 → 提交中…」→「下发成功 · 校验一致」。</div></div>
+      <div class="line"><div class="lbl">内部</div><div>
+        <b>先分三片写进副板暂存区</b>（每片间隔 450 ms），三片都收下后再发<b>提交命令</b>。<br>
+        副板收到提交后，用 Modbus 把 68 字节写成三帧 FC16：
+        <code>0x2000</code>(14 寄存器) / <code>0x200E</code>(14) / <code>0x201C</code>(6)，
+        再写 <code>0x1080</code> 命令字，最后读 <code>0x1050</code> 拿校验结果。</div></div>
+
+      <div class="line"><div class="lbl tx">发</div><div class="hex txb">片1 53 A2 22 00 0D 00 00 1C &lt;28 字节&gt; 40 01
+片2 53 A2 22 00 0D 1C 00 1C &lt;28 字节&gt; 5C 01
+片3 53 A2 12 00 0D 38 00 0C &lt;12 字节&gt; 58 01
+提交 53 A2 04 00 0E 01 08 01</div></div>
+
+      <table>
+        <thead><tr><th>字节</th><th>字段</th><th>值</th><th>说明</th></tr></thead>
+        <tbody>
+          <tr><td>0–1</td><td>帧头</td><td><code>53 A2</code></td><td>下行</td></tr>
+          <tr><td>2–3</td><td>len</td><td><code>22 00</code></td><td>34 = 3 + 28 + 3（小端）</td></tr>
+          <tr><td>4</td><td>cmd</td><td><code>0D</code></td><td>杆包分片写</td></tr>
+          <tr><td>5–6</td><td>off</td><td><code>00 00</code> / <code>1C 00</code> / <code>38 00</code></td><td>0 / 28 / 56（小端）</td></tr>
+          <tr><td>7</td><td>n</td><td><code>1C</code> / <code>1C</code> / <code>0C</code></td><td>28 / 28 / 12，<b>单片最多 28</b></td></tr>
+          <tr><td>8…</td><td>data</td><td>—</td><td>该片的表内容</td></tr>
+        </tbody>
+      </table>
+
+      <div class="line"><div class="lbl rx">收</div><div class="hex rxb">54 A1 09 00 15 01 00 00 1C 00 00 30 01   ← 分片回应：ack=01 off=0000 n=1C
+54 A1 09 00 15 02 01 01 0D 34 12 6A 01   ← 提交完成：ack=02 valid=1 ver=1 count=13 crc=0x1234</div></div>
+
+      <p class="note"><b>判据：</b>拿回帧里的 <code>crc16</code> 和本地算的比，
+      一致才是「下发成功 · 校验一致」；不一致说明主控存的和你发的不一样，要重下。<br>
+      <b>注意分片回应的 6 个字节和提交的不一样</b>：分片是 <code>[01][off_lo][off_hi][n][00][00]</code>，
+      提交才是 <code>[ack][valid][ver][count][crc_lo][crc_hi]</code>。</p>
+    </div>
+  </div>
+
+  <!-- ============ ④ ============ -->
+  <h2>④ 恢复默认 / 擦除</h2>
+
+  <div class="step">
+    <div class="step-h"><span class="no">4</span>另外两个动作<span class="tag">0x0E 命令字</span></div>
+    <div class="step-b">
+      <div class="line"><div class="lbl tx">发</div><div class="hex txb">53 A2 04 00 0E 02 09 01     ← 恢复默认（cmd=02）
+53 A2 04 00 0E 03 0A 01     ← 擦除    （cmd=03）</div></div>
+      <div class="line"><div class="lbl rx">收</div><div class="hex rxb">54 A1 09 00 15 03 00 00 00 00 00 6C 01   ← 擦除完成 ack=03 valid=0</div></div>
+
+      <table>
+        <thead><tr><th>cmd</th><th>动作</th><th>成功时的 ack</th><th>说明</th></tr></thead>
+        <tbody>
+          <tr><td><code>01</code></td><td>提交</td><td><code>0x02</code></td><td>主控擦页写入并回读校验</td></tr>
+          <tr><td><code>02</code></td><td>恢复默认</td><td><code>0x02</code></td><td>主控用出厂表覆盖</td></tr>
+          <tr><td><code>03</code></td><td>擦除</td><td><code>0x03</code></td><td>清掉自定义表，之后 <code>valid=0</code></td></tr>
+          <tr><td><code>04</code></td><td>查状态</td><td><code>0x04</code></td><td><b>只读，不写 flash</b></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ============ 应答码 ============ -->
+  <h2>应答码（<code>0x15</code> 第一个字节）</h2>
+
+  <table>
+    <thead><tr><th>ack</th><th>含义</th><th>怎么办</th></tr></thead>
+    <tbody>
+      <tr><td><code>0x01</code></td><td>分片已收下</td><td>继续发下一片</td></tr>
+      <tr><td><code>0x02</code></td><td>提交完成</td><td>比对 crc16</td></tr>
+      <tr><td><code>0x03</code></td><td>擦除完成</td><td>—</td></tr>
+      <tr><td><code>0x04</code></td><td>状态查询结果</td><td>看 <code>valid</code></td></tr>
+      <tr><td><code>0x81</code></td><td>已受理，还在跑</td><td><b>不是结束</b>，继续轮询 <code>0x0F</code></td></tr>
+      <tr><td><code>0x91</code></td><td>主控链路未就绪</td><td>副板刚上电 / 正在升级，等会儿重来</td></tr>
+      <tr><td><code>0x92</code></td><td>第 1 片没发出去</td><td>串口问题，重来</td></tr>
+      <tr><td><code>0x93</code></td><td>第 2 片没发出去</td><td>同上</td></tr>
+      <tr><td><code>0x94</code></td><td>第 3 片没发出去</td><td>同上</td></tr>
+      <tr><td><code>0xE1</code></td><td>主控 600 ms 没回 <code>0x1050</code></td><td>已重试过一次；仍失败就重来</td></tr>
+      <tr><td><code>0xE2</code></td><td>副板串口这一帧没发出去</td><td>检查 S↔M 连线</td></tr>
+      <tr><td><code>0x82 ~ 0x8F</code></td><td>主控 Modbus 异常应答（<code>0x80 | 异常码</code>）</td><td>异常码 = 低 4 位</td></tr>
+    </tbody>
+  </table>
+
 </section>
 
 </main>
