@@ -23,7 +23,19 @@ const nackText=c=>NACK_TEXT[c]||"未知状态";
 let device=null, server=null, chW=null, chN=null;
 let frames=[], running=false, abort=false, target="M", fw=null;
 let hsReady=null;
-const LOCAL_API=["127.0.0.1","localhost","[::1]","::1"].includes(globalThis.location?.hostname);
+let LOCAL_API=["127.0.0.1","localhost","[::1]","::1"].includes(globalThis.location?.hostname);
+/* 后端可达性探测（2026-11-21）：
+ * Web Bluetooth 只在 https / localhost 这类安全上下文里存在，局域网 http 打开时
+ * navigator.bluetooth 是 undefined —— 网页版"连不上"就是这个原因。
+ * 但只要能打开这个页面，就能访问同一台机器上的 /api/*，蓝牙归后端所有即可，
+ * 和 127.0.0.1 打开完全同一条路。探测到后端就把本地模式打开。 */
+if (!LOCAL_API) {
+  fetch("/api/status", { cache: "no-store" })
+    .then((r) => (r.ok ? r.json() : null))
+    .then((j) => { if (j && j.ble) LOCAL_API = true; })
+    .catch(() => {});
+}
+
 let apiAvailable=false, apiRunning=false, apiRemote=false, apiJobId=null;
 let apiLinkBusy=false, apiBle={connected:false, status:null};
 let switching=false;

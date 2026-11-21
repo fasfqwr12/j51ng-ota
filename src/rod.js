@@ -27,7 +27,19 @@
   let sigX2  = DEF_SIGMA_X2.slice();
 
   /* 本地 API 模式（127.0.0.1）下 BLE 归后端所有，浏览器拿不到 notify */
-  const API_MODE = ["127.0.0.1", "localhost", "[::1]", "::1"].includes(location.hostname);
+  let API_MODE = ["127.0.0.1", "localhost", "[::1]", "::1"].includes(location.hostname);
+  /* 后端可达性探测（2026-11-21）：
+   * Web Bluetooth 只在 https / localhost 这类安全上下文里存在，局域网 http 打开时
+   * navigator.bluetooth 是 undefined —— 网页版"连不上"就是这个原因。
+   * 但只要能打开这个页面，就能访问同一台机器上的 /api/*，蓝牙归后端所有即可，
+   * 和 127.0.0.1 打开完全同一条路。探测到后端就把本地模式打开。 */
+  if (!API_MODE) {
+    fetch("/api/status", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => { if (j && j.ble) API_MODE = true; })
+      .catch(() => {});
+  }
+
   let rxSince = 0;
 
   /* 网页版（Web Bluetooth 直连）下 0x15 回帧走 api.onApp 通知，
@@ -302,10 +314,10 @@
     $("rdDefault")?.addEventListener("click", loadDefault);
     $("rdErase")?.addEventListener("click", erase);
 
-    if (API_MODE) {
-      drain();   /* 把游标推到当前末尾，避免重放旧帧 */
-    } else {
-      /* 网页版：订阅 Web Bluetooth 通知（0x15 回帧从这里来） */
+    /* 两条接收路都备好：API_MODE 可能由后端探测稍后才置位，谁生效谁收到帧。
+     * drain() 在 API 模式下把游标推到末尾（不重放旧帧），网页版则是清本地缓存。 */
+    drain();
+    {
       const api0 = window.__J51NG;
       if (api0 && typeof api0.onApp === "function") {
         api0.onApp(onBtFrame);

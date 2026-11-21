@@ -20,7 +20,19 @@
    *   GitHub Pages 等静态站                → 走 Web Bluetooth（app.js 暴露的 window.__J51NG）
    * 静态站没有后端进程，"网页叫服务器去连蓝牙"那条路不存在；但浏览器自己就是 BLE 客户端，
    * 所以同一套帧格式可以在这里直接收发，两边行为保持一致。 */
-  const IS_LOCAL = ["127.0.0.1", "localhost", "[::1]", "::1"].includes(location.hostname);
+  let IS_LOCAL = ["127.0.0.1", "localhost", "[::1]", "::1"].includes(location.hostname);
+  /* 后端可达性探测（2026-11-21）：
+   * Web Bluetooth 只在 https / localhost 这类安全上下文里存在，局域网 http 打开时
+   * navigator.bluetooth 是 undefined —— 网页版"连不上"就是这个原因。
+   * 但只要能打开这个页面，就能访问同一台机器上的 /api/*，蓝牙归后端所有即可，
+   * 和 127.0.0.1 打开完全同一条路。探测到后端就把本地模式打开。 */
+  if (!IS_LOCAL) {
+    fetch("/api/status", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => { if (j && j.ble) IS_LOCAL = true; })
+      .catch(() => {});
+  }
+
   const WB = window.__J51NG || null;
   const wbQ = [];                        /* 公网模式收帧队列：[[code, Uint8Array]] */
   if (!IS_LOCAL && WB) {

@@ -140,8 +140,20 @@
    *    副板只认 53 A2 开头，所以任何下发都被丢弃。现在统一走 buildFrame()。
    * 2) 本地 API 模式下 BLE 连接归后端所有，浏览器拿不到 notify，
    *    api.connected() 永远是 false。这种模式下改走后端 /api/raw + /api/rx。 */
-  const API_MODE = ["127.0.0.1", "localhost", "[::1]", "::1"].includes(location.hostname);
+  let API_MODE = ["127.0.0.1", "localhost", "[::1]", "::1"].includes(location.hostname);
   let apiRxSince = 0;
+  /* 后端可达性探测（2026-11-21）：
+   * Web Bluetooth 只在 https / localhost 这类安全上下文里存在，局域网 http 打开时
+   * navigator.bluetooth 是 undefined —— 网页版"连不上"就是这个原因。
+   * 但只要能打开这个页面，就能访问同一台机器上的 /api/*，蓝牙归后端所有即可，
+   * 和 127.0.0.1 打开完全同一条路。探测到后端就把本地模式打开。 */
+  if (!API_MODE) {
+    fetch("/api/status", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => { if (j && j.ble) API_MODE = true; })
+      .catch(() => {});
+  }
+
 
   function buildFrame(cmd, data) {
     const pl = new Uint8Array(data || []);
@@ -268,11 +280,10 @@
 
     render();
 
-    /* 本地 API 模式：轮询后端把 54A1 帧取回来 */
-    if (API_MODE) {
-      pollApiRx();
-      setInterval(pollApiRx, 150);
-    }
+    /* 本地 API 模式：轮询后端把 54A1 帧取回来。
+     * 一律启动：API_MODE 可能由后端探测稍后才置位，pollApiRx 自己会判。 */
+    pollApiRx();
+    setInterval(pollApiRx, 150);
   }
 
   if (document.readyState === "loading") {
