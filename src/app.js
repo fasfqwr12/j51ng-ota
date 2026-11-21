@@ -1384,8 +1384,13 @@ async function apiLink(operation){
    * 链路一通立刻点亮「已连接」，不必等 /api/connect 整个返回（含 0x0610）。 */
   let earlyPoll=null;
   if(operation==="connect"){
-    $("hMeta").textContent="正在扫描并连接…";
+    /* 把等待过程显示出来：设备没在广播时（自动关机 / 系统还占着链路）后端要等满
+     * 扫描窗口才重试，界面如果只显示「正在扫描」会像卡死。 */
+    const t0=performance.now();
+    const tick=()=>{ $("hMeta").textContent="正在扫描并连接… "+((performance.now()-t0)/1000).toFixed(1)+" s"; };
+    tick();
     earlyPoll=setInterval(async()=>{
+      tick();
       try{
         const s=await apiRequest("/api/status",{timeoutMs:3000});
         if(s.ble && s.ble.connected){ applyNativeBle(s.ble); clearInterval(earlyPoll); earlyPoll=null; }
@@ -1401,7 +1406,11 @@ async function apiLink(operation){
       (st?` · ${modeTxt(st.mode)} · ${st.model||"旧固件"}${st.device_id?`(${st.device_id})`:""} · ${st.size} B / crc ${h(st.payload_crc)}`:""),"ok");
     return apiBle;
   }catch(e){
-    log("蓝牙操作失败："+e.message,"err");
+    /* 扫不到设备最常见的原因不是蓝牙坏了，而是设备已经按 5 min 规则自动关机了 */
+    const msg=/未发现.*广播设备/.test(e.message)
+      ? "没扫到设备：可能已自动关机（5 min 无按键），按一下键唤醒后再连"
+      : e.message;
+    log("蓝牙操作失败："+msg,"err");
     await syncApiState();
     throw e;
   }finally{ if(earlyPoll) clearInterval(earlyPoll); apiLinkBusy=false; refreshGo(); }
