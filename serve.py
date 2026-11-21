@@ -283,6 +283,15 @@ def job(target, fw, task, temporary=False):
 # ---------------- HTTP ----------------
 
 class Handler(SimpleHTTPRequestHandler):
+    def end_headers(self):
+        """静态文件也一律 no-store。
+        原来只有 /api/* 带 no-store，HTML/JS 走 SimpleHTTPRequestHandler 默认头
+        （只有 Last-Modified），浏览器启发式缓存会继续用旧文件 —— 改完页面看不到效果，
+        只能靠手动改 ?v=N。这里统一加上，改完刷新即生效。"""
+        if not any(b"Cache-Control" in h for h in getattr(self, "_headers_buffer", [])):
+            self.send_header("Cache-Control", "no-store")
+        super().end_headers()
+
     def __init__(self, *a, **kw):
         super().__init__(*a, directory=str(WEB), **kw)
 
