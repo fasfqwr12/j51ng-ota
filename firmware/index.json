@@ -1,5 +1,5 @@
 {
-  "updated": 1795224637,
+  "updated": 1795226542,
   "items": [
     {
       "file": "M_app_latest.bin",
@@ -9,29 +9,29 @@
       "title": "N2SE_M APP v1.75 crc=0xACA3AB5E",
       "size": 96724,
       "fileSize": 96724,
-      "sha256": "33bc5e43ad4449bc8549d08c11e07fe9c7ad77d239128e4b88a9614b68ad7444",
+      "sha256": "70d9de75d5f030376b9981fbc370d36ef6422c9d83de02674b963c859d147822",
       "version": "v1.75",
       "model": "N2SE_M",
       "appCrc": "0xACA3AB5E",
       "codeSize": 96212,
       "imgType": 0,
-      "mtime": 1795224637.9333181
+      "mtime": 1795224699.9839787
     },
     {
       "file": "S_app_latest.bin",
       "role": "app",
       "target": "S",
       "targetName": "蓝牙板 S",
-      "title": "N2SE_S APP v1.12 crc=0x1C824E6F",
-      "size": 45868,
-      "fileSize": 45868,
-      "sha256": "6dc2ca8ab16ec327f90993e3f72997ee181d5f11ad14d826ae0f44540ee5c0e8",
-      "version": "v1.12",
+      "title": "N2SE_S APP v1.13 crc=0xF2C0B6CD",
+      "size": 45984,
+      "fileSize": 45984,
+      "sha256": "89e0043615b701e4876dfe1ccb8e436978edea76a6abd6e8d1b696b52114140d",
+      "version": "v1.13",
       "model": "N2SE_S",
-      "appCrc": "0x1C824E6F",
-      "codeSize": 45356,
+      "appCrc": "0xF2C0B6CD",
+      "codeSize": 45472,
       "imgType": 0,
-      "mtime": 1795186440.5042474
+      "mtime": 1795226542.4772317
     }
   ]
 }

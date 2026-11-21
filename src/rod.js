@@ -175,6 +175,19 @@
 
   let lastRemote = null;   /* {valid, ver, count, crc} */
 
+  /* 副板回 0x15 的 ack：0x02 提交完成 / 0x03 擦除完成 / 0x04 状态
+   * 0x81 受理中（不算结束） / 0xE1 主控 600 ms 没回帧 / 0xE2 副板没发出去
+   * 0x91 主控链路未就绪 / 0x82..0x8F 主控异常应答（0x80|Modbus 异常码） */
+  const isErrAck = (c) => c === 0x91 || c === 0xE1 || c === 0xE2 || (c >= 0x82 && c <= 0x8F);
+  function ackText(c) {
+    if (c === 0xE1) return "主控无应答（600ms 内没回 0x1050）";
+    if (c === 0xE2) return "发送失败：副板串口这一帧没发出去";
+    if (c === 0x91) return "主控链路未就绪（副板刚上电或正在升级）";
+    if (c >= 0x82 && c <= 0x8F) return "主控异常应答 0x" + (c & 0x0F).toString(16).toUpperCase();
+    if (c === 0x92 || c === 0x93 || c === 0x94) return "下发被拒 0x" + c.toString(16).toUpperCase();
+    return "错误码 0x" + c.toString(16).toUpperCase();
+  }
+
   function updateCompare() {
     const { crc } = build();
     const local = `本地 crc=0x${crc.toString(16).toUpperCase().padStart(4, "0")}`;
@@ -201,9 +214,9 @@
     } catch (e) {
       setTail("发送失败：" + e.message); return;
     }
-    const p = await pollResult((x) => x[0] === 0x04 || x[0] === 0xE1, 4000);
-    if (!p) { setTail("读取超时"); lastRemote = null; updateCompare(); return; }
-    if (p[0] === 0xE1) { setTail("主控无应答"); lastRemote = null; updateCompare(); return; }
+    const p = await pollResult((x) => x[0] === 0x04 || isErrAck(x[0]), 4000);
+    if (!p) { setTail("读取超时（副板没回 0x15）"); lastRemote = null; updateCompare(); return; }
+    if (isErrAck(p[0])) { setTail(ackText(p[0])); lastRemote = null; updateCompare(); return; }
     lastRemote = { valid: p[1] ? 1 : 0, ver: p[2], count: p[3], crc: p[4] | (p[5] << 8) };
     setTail("已读取");
     updateCompare();
@@ -224,16 +237,14 @@
     }
     setTail("提交中…");
     await send(frame(0x0E, [1]));
-    const p = await pollResult((x) => [2, 3, 0xE1, 0x92, 0x93, 0x94].includes(x[0]), 8000);
+    const p = await pollResult((x) => [2, 3].includes(x[0]) || isErrAck(x[0]) || [0x92, 0x93, 0x94].includes(x[0]), 8000);
     if (!p) { setTail("提交超时"); return; }
     if (p[0] === 0x02) {
       const r = { valid: p[1] ? 1 : 0, ver: p[2], count: p[3], crc: p[4] | (p[5] << 8) };
       lastRemote = r;
       setTail(r.crc === crc ? "下发成功 · 校验一致" : "下发完成但 crc 不一致");
-    } else if (p[0] === 0xE1) {
-      setTail("提交超时（主控无应答）");
     } else {
-      setTail("发送失败，错误码 0x" + p[0].toString(16).toUpperCase());
+      setTail(ackText(p[0]));
     }
     updateCompare();
   }
@@ -248,12 +259,12 @@
   async function erase() {
     setTail("擦除中…");
     await send(frame(0x0E, [3]));
-    const p = await pollResult((x) => [3, 0xE1].includes(x[0]), 6000);
+    const p = await pollResult((x) => x[0] === 3 || isErrAck(x[0]), 6000);
     if (!p) { setTail("擦除超时"); return; }
     lastRemote = p[0] === 0x03
       ? { valid: p[1] ? 1 : 0, ver: p[2], count: p[3], crc: p[4] | (p[5] << 8) }
       : null;
-    setTail(p[0] === 0x03 ? "已擦除" : "擦除超时");
+    setTail(p[0] === 0x03 ? "已擦除" : ackText(p[0]));
     updateCompare();
   }
 
