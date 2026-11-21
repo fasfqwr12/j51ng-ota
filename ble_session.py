@@ -129,6 +129,10 @@ class NativeBleSession:
             return self._publish(clear_status=True)
         if operation == "connect":
             await host.connect(timeout=6.0)
+            # 2026-11-21：链路一通就先发布「已连接」，再去读 0x0610。
+            # 原来整段塞在一次响应里，前端要等查询（最多重试 1 次 × 1.5 s）
+            # 才看到绿灯，感觉「点了半天没反应」。
+            self._publish(clear_status=True)
             # Old firmware may lack status; a subscribed GATT link is still connected.
             try:
                 return await self._query()

@@ -1380,6 +1380,18 @@ function applyNativeBle(ble){
 async function apiLink(operation){
   if(apiRunning || apiRemote || apiLinkBusy) return;
   apiLinkBusy=true; refreshGo();
+  /* 连接期间后端一建链就 publish，这里每 250 ms 瞄一眼，
+   * 链路一通立刻点亮「已连接」，不必等 /api/connect 整个返回（含 0x0610）。 */
+  let earlyPoll=null;
+  if(operation==="connect"){
+    $("hMeta").textContent="正在扫描并连接…";
+    earlyPoll=setInterval(async()=>{
+      try{
+        const s=await apiRequest("/api/status",{timeoutMs:3000});
+        if(s.ble && s.ble.connected){ applyNativeBle(s.ble); clearInterval(earlyPoll); earlyPoll=null; }
+      }catch(_){}
+    },250);
+  }
   try{
     const result=await apiRequest("/api/"+operation,{method:"POST",timeoutMs:45000});
     applyNativeBle(result.ble);
@@ -1392,7 +1404,7 @@ async function apiLink(operation){
     log("蓝牙操作失败："+e.message,"err");
     await syncApiState();
     throw e;
-  }finally{ apiLinkBusy=false; refreshGo(); }
+  }finally{ if(earlyPoll) clearInterval(earlyPoll); apiLinkBusy=false; refreshGo(); }
 }
 async function syncApiState(){
   if(!LOCAL_API) return;
