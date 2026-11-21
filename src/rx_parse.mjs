@@ -98,6 +98,31 @@ export function createParser(){
           continue;
         }
 
+        /* 53A2：应用协议应答（杆包 0x15、测距板命令回复都走这个头）。
+         * 以前这里没有这个分支 —— 网页直连时这些帧全被当 junk 丢掉，
+         * 所以本地能读、网页读取永远超时。格式与 54A1 同：4 字节头 + len，尾部 2 字节和。 */
+        if(h === 0x53A2){
+          if(buf.length < 4) break;
+          const len = buf[2] | (buf[3] << 8);
+          if(len < 3 || len > MAX_FRAME){
+            frames.push({kind:"error", code:"len", type:0});
+            dropLeading(); continue;
+          }
+          const total = 4 + len;
+          if(buf.length < total) break;
+          if(sum16(buf.slice(0, total - 2)) !== ((buf[total-2] | (buf[total-1] << 8)) & 0xFFFF)){
+            frames.push({kind:"error", code:"sum", type:buf[4]});
+            dropLeading(); continue;
+          }
+          frames.push({
+            kind:"app",
+            cmd:buf[4],
+            payload:buf.slice(5, total - 2)
+          });
+          take(total);
+          continue;
+        }
+
         /* 不是帧头：丢掉 1 字节继续找，避免把二进制垃圾当文本 */
         frames.push({kind:"junk", byte:buf[0]});
         take(1);
