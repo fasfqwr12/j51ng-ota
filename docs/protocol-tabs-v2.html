@@ -1,0 +1,785 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>J51NG 协议与流程</title>
+<style>
+:root{
+  --bg:#f2f1e8; --card:#fff; --line:#ddd8c6; --ink:#2b2a25; --muted:#6f6a5c;
+  --accent:#6b7f3a; --accent-soft:#eef1e2; --code-bg:#1f2119; --code-ink:#e8e6dc;
+  --tx:#2f6b3a; --rx:#7a5a1e; --warn:#b3352c;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);
+     font:15px/1.65 -apple-system,"PingFang SC","Microsoft YaHei",system-ui,sans-serif}
+header{position:sticky;top:0;z-index:9;background:var(--bg);border-bottom:1px solid var(--line)}
+.hd{max-width:920px;margin:0 auto;padding:12px 16px 0}
+h1{font-size:18px;margin:0 0 10px}
+h1 small{font-weight:400;color:var(--muted);font-size:12.5px;margin-left:8px}
+.tabs{display:flex;gap:6px;flex-wrap:wrap;padding-bottom:10px}
+.tabs button{padding:8px 16px;border-radius:10px;border:1px solid var(--line);
+  background:var(--card);color:var(--ink);font-size:13.5px;cursor:pointer;font-family:inherit}
+.tabs button.on{background:var(--accent-soft);color:var(--accent);border-color:var(--accent);font-weight:600}
+main{max-width:920px;margin:0 auto;padding:18px 16px 90px}
+h2{font-size:17px;margin:28px 0 12px;padding-top:12px;border-top:1px solid var(--line)}
+h2:first-child{border-top:0;padding-top:0;margin-top:0}
+p{margin:8px 0}
+.lead{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin:0 0 6px}
+.lead b{color:var(--accent)}
+
+.steps{display:flex;flex-wrap:wrap;gap:6px;margin:14px 0 4px}
+.steps div{flex:1 1 130px;background:var(--card);border:1px solid var(--line);border-radius:9px;
+           padding:7px 10px;font-size:12.5px;color:var(--muted)}
+.steps div b{display:block;color:var(--ink);font-size:13px;margin-bottom:1px}
+.steps div.on{background:var(--accent-soft);border-color:var(--accent)}
+.steps div.on b{color:var(--accent)}
+
+.flow{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px 14px;margin:12px 0}
+.phase{font:600 11.5px/1 ui-monospace,monospace;color:var(--muted);letter-spacing:.5px;margin:0 0 8px 2px}
+.phase:not(:first-child){margin-top:18px;padding-top:14px;border-top:1px dashed var(--line)}
+.fnode{position:relative;border:1.5px solid var(--line);border-radius:10px;padding:9px 12px;
+       background:#fbfaf4;font-size:13.5px}
+.fnode .fn-t{font-weight:600}
+.fnode .fn-d{color:var(--muted);font-size:12.5px;margin-top:2px}
+.fnode .fn-h{display:inline-block;font:600 11px/1 ui-monospace,Consolas,monospace;
+             background:var(--accent);color:#fff;border-radius:5px;padding:3px 5px;margin-right:7px;vertical-align:1px}
+.fnode.go{background:var(--accent-soft);border-color:var(--accent)}
+.fnode.wait{background:#fdf6e3;border-color:#e0c268}
+.farrow{height:20px;margin-left:22px;border-left:2px dashed #b9b3a0;position:relative}
+.farrow::after{content:"";position:absolute;left:-5px;bottom:-1px;border:4px solid transparent;border-top:6px solid #b9b3a0}
+.farrow span{position:absolute;left:10px;top:2px;font-size:11.5px;color:var(--muted);white-space:nowrap}
+.fbranch{margin:10px 0 0 22px;padding:8px 10px;border-left:3px solid var(--warn);
+         background:#fdf1ef;border-radius:0 8px 8px 0;font-size:12.5px;color:#7a2f27}
+
+.step{background:var(--card);border:1px solid var(--line);border-radius:12px;margin:12px 0;overflow:hidden}
+.step-h{display:flex;align-items:center;gap:9px;padding:10px 14px;background:#f7f6ef;
+        border-bottom:1px solid var(--line);font-weight:600;font-size:14px}
+.step-h .no{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;
+            border-radius:6px;background:var(--accent);color:#fff;font:600 12px/1 ui-monospace,monospace}
+.step-h .tag{margin-left:auto;font:400 11.5px ui-monospace,monospace;color:var(--muted)}
+.step-b{padding:12px 14px}
+.ui{background:#f7f6ef;border:1px dashed var(--line);border-radius:8px;padding:7px 10px;
+    font-size:12.5px;color:var(--muted);margin:0 0 10px}
+.ui b{color:var(--ink)}
+.line{display:flex;gap:9px;align-items:flex-start;margin:9px 0}
+.line:first-child{margin-top:0}
+.lbl{flex:0 0 34px;font-size:12px;font-weight:600;padding-top:3px}
+.lbl.tx{color:var(--tx)} .lbl.rx{color:var(--rx)}
+.hex{flex:1;min-width:0;background:var(--code-bg);color:var(--code-ink);border-radius:8px;
+     padding:8px 10px;font:12.5px/1.55 ui-monospace,Consolas,monospace;overflow-x:auto;white-space:pre}
+.hex.txb{border-left:3px solid #4a8f57}
+.hex.rxb{border-left:3px solid #c39a3f}
+
+table.brk{width:100%;border-collapse:collapse;margin:10px 0 0;font-size:12px;
+     font-family:ui-monospace,Consolas,monospace}
+table.brk th,table.brk td{border:1px solid var(--line);padding:4px 6px;text-align:left;vertical-align:top}
+table.brk th{background:#f7f6ef;font-weight:600;font-size:11px}
+table.brk td.byt{background:var(--code-bg);color:var(--code-ink);font-size:12px;white-space:nowrap;width:26%}
+table.brk td.desc{background:#fbfaf4;font-family:-apple-system,"PingFang SC",sans-serif;
+     font-size:12px;color:var(--muted);width:24%}
+table.brk td.mean{background:#fff;font-family:-apple-system,"PingFang SC",sans-serif;font-size:12.5px}
+table.brk tr.hi td.byt{background:#3d4a2a}
+table.brk tr.hi td.mean{background:#f4f7ec}
+
+.note{color:var(--muted);font-size:12.5px;margin:10px 0 0;padding-top:9px;border-top:1px dashed var(--line)}
+.note b{color:var(--ink);font-weight:600}
+.field{margin:9px 0 0;font-size:13px}
+.field code,.note code{background:#f2f1e8;border:1px solid var(--line);border-radius:4px;padding:1px 5px;
+            font:12px ui-monospace,Consolas,monospace}
+
+table.tb{border-collapse:collapse;width:100%;margin:10px 0;background:var(--card);font-size:13px;
+      display:block;overflow-x:auto}
+table.tb th,table.tb td{border:1px solid var(--line);padding:7px 10px;text-align:left;
+      vertical-align:top;white-space:nowrap}
+table.tb th{background:#f7f6ef;font-weight:600}
+table.tb td code{background:#f2f1e8;border-radius:4px;padding:1px 5px;font:12px ui-monospace,Consolas,monospace}
+
+.warn{background:#fdf1ef;border-left:3px solid var(--warn);border-radius:0 8px 8px 0;
+      padding:10px 12px;margin:12px 0;font-size:13px;color:#7a2f27}
+.tip{background:#f7f6ef;border-left:3px solid var(--accent);border-radius:0 8px 8px 0;
+     padding:10px 12px;margin:12px 0;font-size:13px;color:var(--muted)}
+.tip b{color:var(--ink)}
+.ok{background:#eef4ea;border-left:3px solid #2f6b3a;border-radius:0 8px 8px 0;
+    padding:10px 12px;margin:12px 0;font-size:13px;color:#2b4a2b}
+.ok b{color:#1f3a1f}
+.placeholder{background:var(--card);border:1px dashed var(--line);border-radius:12px;
+             padding:26px 18px;text-align:center;color:var(--muted)}
+.placeholder b{display:block;color:var(--ink);font-size:15px;margin-bottom:6px}
+@media (max-width:640px){
+  .lbl{flex-basis:26px;font-size:11px}
+  table.tb th,table.tb td{white-space:normal}
+  .hex{font-size:11.5px}
+  table.brk td.byt{width:34%;font-size:11px}
+  table.brk td.desc{width:20%;font-size:11px}
+}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="hd">
+    <h1>J51NG 协议与流程 <small>M v1.83 / S v1.16 · 2026-11-21</small></h1>
+    <div class="tabs">
+      <button class="on" data-t="ota">OTA 升级</button>
+      <button data-t="report">状态与距离上报</button>
+      <button data-t="rod">自定义杆</button>
+    </div>
+  </div>
+</header>
+
+<main>
+
+<section id="ota">
+
+  <div class="lead">
+    <b>本文按上位机界面上真实的点击顺序讲：</b>连接蓝牙 → 扫描设备 → 刷新在线库 → 核对版本 → 一键升级。
+    每一步先讲<b>界面上点哪里</b>，再讲<b>背后发了什么帧</b>，然后<b>把帧一个字节一个字节拆开</b>，最后给<b>一整轮真实例子</b>。
+  </div>
+
+  <div class="steps">
+    <div class="on"><b>① 连接蓝牙</b>建立链路、订阅通知</div>
+    <div><b>② 扫描设备</b>查清单、逐块读版本</div>
+    <div><b>③ 刷新在线库</b>读 bin 的镜像头</div>
+    <div><b>④ 核对版本</b>设备 vs 库，逐行出结论</div>
+    <div><b>⑤ 一键升级</b>按顺序逐块刷写</div>
+  </div>
+
+  <h2>一、整轮流程图</h2>
+
+  <div class="flow">
+    <div class="phase">① 连接蓝牙</div>
+    <div class="fnode go">
+      <span class="fn-h">1</span><span class="fn-t">扫描 AIMTECH* → 连接 → 订阅通知 → MTU 247</span>
+      <div class="fn-d">不订阅通知，后面所有应答一帧都收不到</div>
+    </div>
+    <div class="farrow"><span>已连接</span></div>
+
+    <div class="phase">② 扫描设备（点「扫描设备」）</div>
+    <div class="fnode">
+      <span class="fn-h">2</span><span class="fn-t">0x24 查清单 → 0x25</span>
+      <div class="fn-d">几块附属板 · 机型 · 设备ID(MAC) · 板号列表</div>
+    </div>
+    <div class="farrow"><span>板号 [1, 2]</span></div>
+    <div class="fnode">
+      <span class="fn-h">3</span><span class="fn-t">0x20 逐块查描述 → 0x21</span>
+      <div class="fn-d">流水线发、统一收；没回来的单独补一次</div>
+    </div>
+    <div class="farrow"><span>版本 / CRC / 字节数</span></div>
+    <div class="fnode">
+      <span class="fn-h">4</span><span class="fn-t">0x22 逐块查型号 → 0x23</span>
+      <div class="fn-d">N2SE_S / N2SE_M</div>
+    </div>
+    <div class="farrow"><span>表格出结果</span></div>
+
+    <div class="phase">③ 刷新在线库（点「刷新在线库」）</div>
+    <div class="fnode wait">
+      <span class="fn-h">5</span><span class="fn-t">读 firmware/index.json 或 /api/manifest</span>
+      <div class="fn-d">不发蓝牙帧；解析每个 bin 开头的镜像元数据</div>
+    </div>
+
+    <div class="phase">④ 核对版本（自动，无按钮）</div>
+    <div class="fnode go">
+      <span class="fn-h">6</span><span class="fn-t">逐行比对：型号 → 版本 → CRC</span>
+      <div class="fn-d">已是最新 / 需升级 / 型号不符 / 库里没有</div>
+    </div>
+
+    <div class="phase">⑤ 一键升级（点「一键升级」）</div>
+    <div class="farrow"><span>结论=需升级</span></div>
+    <div class="fnode">
+      <span class="fn-h">7</span><span class="fn-t">0x0610 只读探测 → 0x0612</span>
+      <div class="fn-d">在 APP 还是 Boot？容量够不够？</div>
+    </div>
+    <div class="farrow"><span>决定路径</span></div>
+    <div class="fnode">
+      <span class="fn-h">8</span><span class="fn-t">EB90 0101 握手 → 0102</span>
+      <div class="fn-d">报硬件码，拿 maxpkt 和暂存区容量</div>
+    </div>
+    <div class="farrow"><span>status=00</span></div>
+    <div class="fnode">
+      <span class="fn-h">9</span><span class="fn-t">EB90 0201 参数 → 0202</span>
+      <div class="fn-d">报大小/校验值/包长；设备擦除 APP 区</div>
+    </div>
+    <div class="farrow"><span>status=00</span></div>
+    <div class="fnode">
+      <span class="fn-h">10</span><span class="fn-t">EB90 0301 数据 → 0302 / 0303</span>
+      <div class="fn-d">窗口 8 包 · 间隔 4 ms · 每包 128 B</div>
+    </div>
+    <div class="farrow"><span>全部 ACK</span></div>
+    <div class="fnode">
+      <span class="fn-h">11</span><span class="fn-t">EB90 0401 校验 → 0402</span>
+      <div class="fn-d">比对设备实算的 32 字节</div>
+    </div>
+    <div class="farrow"><span>一致</span></div>
+    <div class="fnode">
+      <span class="fn-h">12</span><span class="fn-t">EB90 0501 完成 → 0502</span>
+      <div class="fn-d">设备写标志后复位；断链属正常</div>
+    </div>
+    <div class="farrow"><span>设备重启</span></div>
+    <div class="fnode go">
+      <span class="fn-h">13</span><span class="fn-t">重连 → 0x0610 复查 → 再扫一次核对</span>
+      <div class="fn-d">size 和 CRC 与目标固件一致才算成功</div>
+    </div>
+
+    <div class="fbranch">
+      升级顺序固定：<b>先主控 M（升完重启验证）→ 再蓝牙板 S</b>。
+      S 一升级 BLE 立刻断，所以它永远排最后。
+    </div>
+  </div>
+
+  <h2>二、① 连接蓝牙</h2>
+
+  <div class="step">
+    <div class="step-h"><span class="no">1</span>建立链路 <span class="tag">BLE</span></div>
+    <div class="step-b">
+      <div class="ui"><b>界面：</b>点「连接蓝牙」→ 系统弹出蓝牙选择框 → 选 <b>AIMTECH VHR</b></div>
+      <table class="tb">
+        <thead><tr><th>项</th><th>值</th></tr></thead>
+        <tbody>
+          <tr><td>设备名</td><td><code>AIMTECH VHR</code></td></tr>
+          <tr><td>扫描过滤</td><td>前缀 <code>AIMTECH</code></td></tr>
+          <tr><td>Service</td><td><code>00002760-08c2-11e1-9073-0e8ac72e1001</code></td></tr>
+          <tr><td>Write</td><td><code>00002760-08c2-11e1-9073-0e8ac72e0001</code></td></tr>
+          <tr><td>Notify</td><td><code>00002760-08c2-11e1-9073-0e8ac72e0002</code></td></tr>
+        </tbody>
+      </table>
+      <div class="note">
+        连上之后必须再做两件事：<b>① 订阅 Notify（写 CCCD = 01 00）② 请求 MTU 247</b>。
+        不订阅的话，下面所有"收"的应答一帧都收不到，界面会一直转圈。
+      </div>
+    </div>
+  </div>
+
+  <h2>三、② 扫描设备</h2>
+
+  <div class="step">
+    <div class="step-h"><span class="no">2</span>查清单 <span class="tag">53 A2 · 0x24 → 0x25</span></div>
+    <div class="step-b">
+      <div class="ui"><b>界面：</b>点「扫描设备」后先出这一行 —— <b>设备 ID（蓝牙板 MAC）：4B:AC:00:15:39:33</b></div>
+
+      <div class="line"><span class="lbl tx">发</span><div class="hex txb">53 A2 03 00 24 1C 01</div></div>
+      <div class="line"><span class="lbl rx">收</span><div class="hex rxb">54 A1 0D 00 25 01 01 33 39 15 00 AC 4B 02 00 A3 02</div></div>
+
+      <table class="brk">
+        <thead><tr><th>字节</th><th>值</th><th>含义</th></tr></thead>
+        <tbody>
+          <tr><td class="desc">0-1</td><td class="byt">54 A1</td><td class="mean">帧头（上行）</td></tr>
+          <tr><td class="desc">2-3</td><td class="byt">0D 00</td><td class="mean">len = 13 = payload(10) + 3</td></tr>
+          <tr><td class="desc">4</td><td class="byt">25</td><td class="mean">cmd = 清单应答</td></tr>
+          <tr><td class="desc">5</td><td class="byt">01</td><td class="mean">附属板数量 = <b>1 块</b>（只有主控 M）</td></tr>
+          <tr><td class="desc">6</td><td class="byt">01</td><td class="mean">机型 = 1（J51NG / N2SE 双板）</td></tr>
+          <tr class="hi"><td class="desc">7-12</td><td class="byt">33 39 15 00 AC 4B</td><td class="mean">MAC（小端存储），反转显示 = <b>4B:AC:00:15:39:33</b></td></tr>
+          <tr><td class="desc">13</td><td class="byt">02</td><td class="mean">附属板 id 列表第 1 个 = <b>2</b>（主控 M）</td></tr>
+          <tr><td class="desc">14</td><td class="byt">00</td><td class="mean">列表第 2 个 = 0（到此结束）</td></tr>
+          <tr><td class="desc">15-16</td><td class="byt">A3 02</td><td class="mean">校验和 = 0x02A3</td></tr>
+        </tbody>
+      </table>
+
+      <div class="note">
+        <b>蓝牙板自己（id=1）不在这个列表里</b>，上位机固定先把 1 加进去，所以最后要扫的是 <b>[1, 2]</b> 两块。
+        实际还会<b>连扫两轮取并集</b>——主控那条串口总线有时抢不到，单轮漏掉一块不代表它不存在。
+      </div>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-h"><span class="no">3</span>逐块查描述 <span class="tag">53 A2 · 0x20 → 0x21</span></div>
+    <div class="step-b">
+      <div class="ui"><b>界面：</b>表格出两行，每行显示 <b>板卡 / 型号 / 设备版本 / 设备 CRC</b></div>
+
+      <div class="line"><span class="lbl tx">发</span><div class="hex txb">53 A2 04 00 20 01 1A 01</div></div>
+      <div class="line"><span class="lbl rx">收</span><div class="hex rxb">54 A1 0F 00 21 01 01 01 10 65 FB A0 9A BC B1 00 00 3F 05</div></div>
+
+      <table class="brk">
+        <thead><tr><th>字节</th><th>值</th><th>含义</th></tr></thead>
+        <tbody>
+          <tr><td class="desc">4</td><td class="byt">21</td><td class="mean">cmd = 描述应答</td></tr>
+          <tr><td class="desc">5</td><td class="byt">01</td><td class="mean">id = 1（蓝牙板 S）</td></tr>
+          <tr><td class="desc">6</td><td class="byt">01</td><td class="mean">stage = 1 → 跑在 <b>APP</b>（0=Boot，0xFF=读不到）</td></tr>
+          <tr class="hi"><td class="desc">7-8</td><td class="byt">01 10</td><td class="mean">版本 = <b>v1.16</b>（高字节.低字节）</td></tr>
+          <tr class="hi"><td class="desc">9-12</td><td class="byt">65 FB A0 9A</td><td class="mean">CRC32 小端 → <b>0x9AA0FB65</b></td></tr>
+          <tr class="hi"><td class="desc">13-16</td><td class="byt">BC B1 00 00</td><td class="mean">代码区字节数 = <b>45500</b></td></tr>
+          <tr><td class="desc">17-18</td><td class="byt">3F 05</td><td class="mean">校验和 = 0x053F</td></tr>
+        </tbody>
+      </table>
+
+      <div class="line"><span class="lbl tx">发</span><div class="hex txb">53 A2 04 00 20 02 1B 01</div></div>
+      <div class="line"><span class="lbl rx">收</span><div class="hex rxb">54 A1 0F 00 21 02 01 01 83 BD 42 27 DB 54 79 01 00 7B 04</div></div>
+      <div class="field">
+        主控 M：id=<code>02</code> · stage=<code>01</code>（APP）· 版本 <b>v1.83</b> ·
+        CRC <b>0xDB2742BD</b> · 字节数 <b>96596</b>
+      </div>
+
+      <div class="note">
+        <b>为什么一起发再一起收：</b>如果一块一块"发一条等满超时"，两块板要串着等两轮；
+        实际做法是<b>所有 0x20 一起发出去，然后统一收</b>，只等一轮。
+        没回来的再单独补发一次，不让一次丢帧变成"这块板不存在"。
+      </div>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-h"><span class="no">4</span>逐块查型号 <span class="tag">53 A2 · 0x22 → 0x23</span></div>
+    <div class="step-b">
+      <div class="ui"><b>界面：</b>表格「型号」列出 <b>N2SE_S</b> / <b>N2SE_M</b></div>
+
+      <div class="line"><span class="lbl tx">发</span><div class="hex txb">53 A2 04 00 22 01 1C 01</div></div>
+      <div class="line"><span class="lbl rx">收</span><div class="hex rxb">54 A1 10 00 23 01 4E 32 53 45 5F 53 00 00 00 00 00 00 F3 02</div></div>
+
+      <table class="brk">
+        <thead><tr><th>字节</th><th>值</th><th>含义</th></tr></thead>
+        <tbody>
+          <tr><td class="desc">4</td><td class="byt">23</td><td class="mean">cmd = 型号应答</td></tr>
+          <tr><td class="desc">5</td><td class="byt">01</td><td class="mean">id = 1（蓝牙板 S）</td></tr>
+          <tr class="hi"><td class="desc">6-17</td><td class="byt">4E 32 53 45 5F 53 00 00 00 00 00 00</td><td class="mean">型号 ASCII = <b>"N2SE_S"</b>，不足 12 字节补 0</td></tr>
+          <tr><td class="desc">18-19</td><td class="byt">F3 02</td><td class="mean">校验和</td></tr>
+        </tbody>
+      </table>
+
+      <div class="note">
+        型号是<b>防呆用的</b>：主控的 bin 发给蓝牙板会被容量和元数据挡下来，但那时候 APP 区可能已经擦了一半。
+        所以界面上先按型号把固件匹配一遍，对不上直接拦住。
+      </div>
+    </div>
+  </div>
+
+  <h2>四、③ 刷新在线库</h2>
+
+  <div class="step">
+    <div class="step-h"><span class="no">5</span>读固件库 <span class="tag">不发蓝牙帧</span></div>
+    <div class="step-b">
+      <div class="ui"><b>界面：</b>点「刷新在线库」→ 表格右侧出现 <b>库版本 / 库 CRC</b> 两列</div>
+
+      <div class="field">
+        本地（127.0.0.1）：<code>GET /api/manifest</code>　·　
+        公网（GitHub Pages）：<code>GET ./firmware/index.json</code>
+      </div>
+
+      <div class="line"><span class="lbl">收</span><div class="hex rxb">{
+  "items": [
+    { "file": "M_app_latest.bin", "model": "N2SE_M", "board_id": 2,
+      "imgtype": 0, "fw_major": 1, "fw_minor": 83,
+      "app_crc": "0xDB2742BD", "size": 96084 },
+    { "file": "S_app_latest.bin", "model": "N2SE_S", "board_id": 1,
+      "imgtype": 0, "fw_major": 1, "fw_minor": 16,
+      "app_crc": "0x9AA0FB65", "size": 45500 }
+  ]
+}</div></div>
+
+      <div class="note">
+        这些字段不是手填的，是后端<b>直接读每个 bin 开头的镜像元数据块</b>解析出来的（型号、版本、CRC32、代码区字节数）。
+        <b>只比 imgtype=0 的 APP 镜像</b>，boot 镜像不参与 OTA。
+        <br><br>
+        注意 <code>size</code>（96084）和 bin 文件大小（96596）<b>不是一回事</b>：
+        size 是代码区字节数，文件里还带 512 字节的元数据块。
+      </div>
+    </div>
+  </div>
+
+  <h2>五、④ 核对版本（自动）</h2>
+
+  <div class="step">
+    <div class="step-h"><span class="no">6</span>逐行比对 <span class="tag">纯前端判断</span></div>
+    <div class="step-b">
+      <div class="ui"><b>界面：</b>「结论」列 —— <b>已是最新 / 需升级 v1.82 → v1.83 / 型号不符 / 库里没有</b></div>
+
+      <table class="tb">
+        <thead><tr><th>顺序</th><th>判断</th><th>结论</th><th>能不能升</th></tr></thead>
+        <tbody>
+          <tr><td>1</td><td>这块板有没有应答</td><td>无应答</td><td>否</td></tr>
+          <tr><td>2</td><td>库里有没有这个 id 的固件</td><td>库里没有这块板的固件</td><td>否</td></tr>
+          <tr><td>3</td><td>设备型号 vs 库型号</td><td>型号不符（库是 N2SE_M）</td><td>否</td></tr>
+          <tr><td>4</td><td>版本相同 <b>且</b> CRC 相同</td><td>已是最新</td><td>否</td></tr>
+          <tr><td>5</td><td>版本不同</td><td>需升级 v1.82 → v1.83</td><td><b>是</b></td></tr>
+          <tr><td>6</td><td>版本相同但 CRC 不同</td><td>版本相同但 CRC 不同（需重烧）</td><td><b>是</b></td></tr>
+        </tbody>
+      </table>
+
+      <div class="tip">
+        <b>为什么版本和 CRC 都要比：</b>版本号是人为标的，改代码忘了改版本号很常见；
+        CRC 是编译产物算出来的，一定跟着内容变。所以<b>版本相同但 CRC 不同 = 内容真的不一样，要重烧</b>。
+      </div>
+
+      <div class="ok">
+        <b>例子：</b>设备报 <code>v1.83 / 0xDB2742BD</code>，库里也是 <code>v1.83 / 0xDB2742BD</code> → <b>已是最新，跳过</b>；
+        设备报 <code>v1.82 / 0x12345678</code> → <b>需升级</b>。
+      </div>
+    </div>
+  </div>
+
+  <h2>六、⑤ 一键升级</h2>
+
+  <div class="step">
+    <div class="step-h"><span class="no">7</span>只读探测 <span class="tag">EB 90 · 0x0610 → 0x0612</span></div>
+    <div class="step-b">
+      <div class="ui"><b>界面：</b>点「一键升级」，日志先打一行当前状态，<b>设备此时不会断开</b></div>
+
+      <div class="line"><span class="lbl tx">发</span><div class="hex txb">EB 90 06 10 00 00 D6</div></div>
+      <div class="line"><span class="lbl rx">收</span><div class="hex rxb">EB 90 06 12 00 30 4A 35 53 54 02 01 03 00 BC B1 00 00 65 FB A0 9A 10 01 00 00 00 03 E4 00 00 F0 02 00 00 00 00 00 4E 32 53 45 5F 53 00 00 02 01 00 00 00 00 00 00 E5</div></div>
+
+      <table class="brk">
+        <thead><tr><th>字节</th><th>值</th><th>含义</th></tr></thead>
+        <tbody>
+          <tr><td class="desc">0-1</td><td class="byt">EB 90</td><td class="mean">帧头</td></tr>
+          <tr><td class="desc">2-3</td><td class="byt">06 12</td><td class="mean">type = 状态应答</td></tr>
+          <tr><td class="desc">4-5</td><td class="byt">00 30</td><td class="mean">len = 48</td></tr>
+          <tr><td class="desc">6-9</td><td class="byt">4A 35 53 54</td><td class="mean">签名 <b>"J5ST"</b>；认不出这个就说明不是新固件</td></tr>
+          <tr><td class="desc">10</td><td class="byt">02</td><td class="mean">schema = 2（48 字节版）</td></tr>
+          <tr class="hi"><td class="desc">11</td><td class="byt">01</td><td class="mean"><b>mode：0 = Boot，1 = APP</b> ← 最关键的一字节</td></tr>
+          <tr><td class="desc">12-13</td><td class="byt">03 00</td><td class="mean">flags：bit0 元数据有效 · bit1 头 CRC 对 · bit2 已排定复位</td></tr>
+          <tr><td class="desc">14-17</td><td class="byt">BC B1 00 00</td><td class="mean">运行镜像代码区字节数 = 45500</td></tr>
+          <tr><td class="desc">18-21</td><td class="byt">65 FB A0 9A</td><td class="mean">运行镜像 CRC32 = 0x9AA0FB65</td></tr>
+          <tr><td class="desc">22-23</td><td class="byt">10 01</td><td class="mean">固件版本 = v1.16</td></tr>
+          <tr><td class="desc">24-25</td><td class="byt">00 00</td><td class="mean">硬件版本</td></tr>
+          <tr><td class="desc">26</td><td class="byt">00</td><td class="mean">phase = 0（空闲；3 = 接收中）</td></tr>
+          <tr><td class="desc">27</td><td class="byt">03</td><td class="mean">target = 3（1=M，2=R，3=S）</td></tr>
+          <tr><td class="desc">28-29</td><td class="byt">E4 00</td><td class="mean">max_payload = 228</td></tr>
+          <tr class="hi"><td class="desc">30-33</td><td class="byt">00 F0 02 00</td><td class="mean"><b>capacity = 192512 B（188 KB）</b> ← 容量闸门</td></tr>
+          <tr><td class="desc">34-37</td><td class="byt">00 00 00 00</td><td class="mean">received = 0（本轮已收字节）</td></tr>
+          <tr><td class="desc">38-45</td><td class="byt">4E 32 53 45 5F 53 00 00</td><td class="mean">型号 = "N2SE_S"</td></tr>
+          <tr><td class="desc">46</td><td class="byt">02</td><td class="mean">device_id = 2（S）</td></tr>
+          <tr><td class="desc">47</td><td class="byt">01</td><td class="mean">元数据格式版本 = 1</td></tr>
+          <tr><td class="desc">48-53</td><td class="byt">00 ×6</td><td class="mean">保留</td></tr>
+          <tr><td class="desc">54</td><td class="byt">E5</td><td class="mean">CRC8</td></tr>
+        </tbody>
+      </table>
+
+      <div class="warn">
+        <b>为什么不能省这一步：</b>蓝牙板在 APP 模式收到握手 <code>0x0101</code> 会<b>立刻交班复位</b>——
+        用户正在用着的东西突然断连。而 <code>0x0610</code> 只读，问完设备状态一点不变。
+        <b>先问，再决定要不要动手。</b>
+      </div>
+
+      <div class="field">同一台设备如果正在升级、或刚被擦过，<code>0x0612</code> 会长这样（mode=0 在 Boot、phase=3 接收中、received=12800）：</div>
+      <div class="line"><span class="lbl rx">收</span><div class="hex rxb">EB 90 06 12 00 30 4A 35 53 54 02 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 03 03 E4 00 00 F0 02 00 00 32 00 00 4E 32 53 45 5F 53 00 00 02 01 00 00 00 00 00 00 9E</div></div>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-h"><span class="no">8</span>握手 <span class="tag">EB 90 · 0x0101 → 0x0102</span></div>
+    <div class="step-b">
+      <div class="ui"><b>界面：</b>日志打 <code>[1] 握手 状态=OK 硬件码=J51VA-M 版本=v1.83 maxpkt=228</code></div>
+
+      <div class="field"><b>先决定路径</b>（不发帧，纯判断）：</div>
+      <table class="tb">
+        <thead><tr><th>升谁</th><th>0x0612 说在</th><th>怎么做</th><th>用户感受</th></tr></thead>
+        <tbody>
+          <tr><td rowspan="2">主控 M</td><td>APP</td><td><b>透传</b>：S 原样把 EB90 转给 M 的 boot</td><td>不断连</td></tr>
+          <tr><td>Boot</td><td>直接发 EB90</td><td>不断连</td></tr>
+          <tr><td rowspan="2">蓝牙板 S</td><td>APP</td><td><b>交班</b>：发一次握手 → S 复位进 Boot → 断链 → 重连</td><td><b>断一次</b></td></tr>
+          <tr><td>Boot</td><td>直接发 EB90</td><td>不断连</td></tr>
+        </tbody>
+      </table>
+
+      <div class="line"><span class="lbl tx">发</span><div class="hex txb">EB 90 01 01 00 10 4A 35 31 56 41 2D 4D FF FF FF FF FF FF FF FF FF CE</div></div>
+      <div class="line"><span class="lbl rx">收</span><div class="hex rxb">EB 90 01 02 00 19 00 4A 35 31 56 41 2D 4D FF FF FF FF FF FF FF FF FF 01 83 00 E4 00 98 01 00 83</div></div>
+
+      <table class="brk">
+        <thead><tr><th>字节</th><th>值</th><th>含义</th></tr></thead>
+        <tbody>
+          <tr><td class="desc">4-5</td><td class="byt">00 19</td><td class="mean">len = 25</td></tr>
+          <tr class="hi"><td class="desc">6</td><td class="byt">00</td><td class="mean"><b>status = 0 成功</b>（0xE1 = 硬件码不匹配）</td></tr>
+          <tr><td class="desc">7-22</td><td class="byt">4A 35 31 56 41 2D 4D FF FF FF FF FF FF FF FF FF</td><td class="mean">硬件码回显 = <b>"J51VA-M"</b> + 9 个 FF</td></tr>
+          <tr><td class="desc">23-26</td><td class="byt">01 83 00 00</td><td class="mean">Boot 版本 = v1.83</td></tr>
+          <tr class="hi"><td class="desc">27-28</td><td class="byt">00 E4</td><td class="mean"><b>maxpkt = 228</b>（单帧最大数据长度）</td></tr>
+          <tr class="hi"><td class="desc">29-32</td><td class="byt">00 98 01 00</td><td class="mean"><b>暂存区容量 = 104448 B</b></td></tr>
+          <tr><td class="desc">33</td><td class="byt">83</td><td class="mean">CRC8</td></tr>
+        </tbody>
+      </table>
+
+      <div class="field">
+        请求里的硬件码：主控 <code>J51VA-M</code> = <code>4A 35 31 56 41 2D 4D</code>，
+        蓝牙板 <code>J51VA-S</code> = <code>4A 35 31 56 41 2D 53</code>，不足 16 字节补 <code>FF</code>。
+      </div>
+
+      <div class="note">
+        <b>硬件码发错会怎样：</b>status 返回 <code>0xE1</code>，会话直接结束。
+        这就是"把 M 的帧发给了 S"的典型表现。
+      </div>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-h"><span class="no">9</span>参数 <span class="tag">EB 90 · 0x0201 → 0x0202</span></div>
+    <div class="step-b">
+      <div class="ui"><b>界面：</b>日志打 <code>[1a] 容量检查通过：镜像 96596 B &lt;= 104448 B</code>，然后开始擦除</div>
+
+      <div class="line"><span class="lbl tx">发</span><div class="hex txb">EB 90 02 01 00 26 00 01 79 54 BD 42 27 DB 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 80 43</div></div>
+      <div class="line"><span class="lbl rx">收</span><div class="hex rxb">EB 90 02 02 00 01 00 FD</div></div>
+
+      <table class="brk">
+        <thead><tr><th>字节</th><th>值</th><th>含义</th></tr></thead>
+        <tbody>
+          <tr><td class="desc">4-5</td><td class="byt">00 26</td><td class="mean">len = 38</td></tr>
+          <tr class="hi"><td class="desc">6-9</td><td class="byt">00 01 79 54</td><td class="mean"><b>size = 96596</b>（大端，固件代码区字节数）</td></tr>
+          <tr class="hi"><td class="desc">10-41</td><td class="byt">BD 42 27 DB 00 ×28</td><td class="mean"><b>校验值 32 字节</b>：CRC32 小端 4 字节 + 28 个 0</td></tr>
+          <tr class="hi"><td class="desc">42-43</td><td class="byt">00 80</td><td class="mean"><b>pkt = 128</b>（单包数据长度，必须 4 字节对齐）</td></tr>
+          <tr><td class="desc">44</td><td class="byt">43</td><td class="mean">CRC8</td></tr>
+        </tbody>
+      </table>
+
+      <div class="warn">
+        <b>那 32 字节不是 SHA256！</b>现在的做法是：<b>镜像元数据里的 CRC32 → 4 字节小端 → 后面补 28 个 0</b>。
+        后面的 <code>0x0401</code> 校验用的是同一个值。按真 SHA256 填，校验一定不过。
+      </div>
+
+      <div class="note">
+        设备收到后会<b>擦除 APP 区</b>，这一步是秒级的，期间不要重发、不要超时重试。
+        应答 <code>status=00</code> 才表示"已擦好、可以发数据"。
+      </div>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-h"><span class="no">10</span>数据 <span class="tag">EB 90 · 0x0301 → 0x0302 / 0x0303</span></div>
+    <div class="step-b">
+      <div class="ui"><b>界面：</b>进度条 + <code>128/755　16384 B　1.2 s　13600 B/s　重传 0</code></div>
+
+      <div class="line"><span class="lbl tx">发</span><div class="hex txb">EB 90 03 01 00 06 00 00 02 F3 00 80 79</div></div>
+      <div class="field">← 这是帧头，后面还要跟 128 字节数据</div>
+
+      <table class="brk">
+        <thead><tr><th>字节</th><th>值</th><th>含义</th></tr></thead>
+        <tbody>
+          <tr><td class="desc">4-5</td><td class="byt">00 06</td><td class="mean">len = 6（不含数据部分）</td></tr>
+          <tr class="hi"><td class="desc">6-7</td><td class="byt">00 00</td><td class="mean"><b>seq = 0</b>（第几包，从 0 开始）</td></tr>
+          <tr class="hi"><td class="desc">8-9</td><td class="byt">02 F3</td><td class="mean"><b>total = 755</b>（总包数 = 96596 ÷ 128 向上取整）</td></tr>
+          <tr class="hi"><td class="desc">10-11</td><td class="byt">00 80</td><td class="mean"><b>len = 128</b>（本包数据长度，末包可能不足）</td></tr>
+          <tr><td class="desc">12…</td><td class="byt">—</td><td class="mean">128 字节数据</td></tr>
+        </tbody>
+      </table>
+
+      <div class="field">末包（第 755 包，只剩 84 字节）：</div>
+      <div class="line"><span class="lbl tx">发</span><div class="hex txb">EB 90 03 01 00 06 02 F2 02 F3 00 54 C4 &lt;84 字节&gt;</div></div>
+
+      <div class="field">设备每包回一个 ACK：</div>
+      <div class="line"><span class="lbl rx">收</span><div class="hex rxb">EB 90 03 02 00 03 00 00 00 0E</div></div>
+      <table class="brk">
+        <thead><tr><th>字节</th><th>值</th><th>含义</th></tr></thead>
+        <tbody>
+          <tr><td class="desc">6</td><td class="byt">00</td><td class="mean">status = 0 收到</td></tr>
+          <tr><td class="desc">7-8</td><td class="byt">00 00</td><td class="mean">seq = 0（确认的是第 0 包）</td></tr>
+        </tbody>
+      </table>
+
+      <div class="field">出错时回 NACK，要求从该 seq 重发：</div>
+      <div class="line"><span class="lbl rx">收</span><div class="hex rxb">EB 90 03 03 00 03 10 00 01 82</div></div>
+      <div class="field"><code>status=0x10</code>（长度/容量错）· <code>seq=1</code> → <b>从第 1 包重发</b></div>
+
+      <div class="note">
+        <b>实际参数：</b>窗口 <b>8 包</b>、包间隔 <b>4 ms</b>、单包 <b>128 B</b>。
+        主控 96596 ÷ 128 = <b>755 包</b>，蓝牙板 45500 ÷ 128 = <b>356 包</b>。
+        <br><br>
+        <b>包长必须 4 字节对齐</b>（设备内部做 <code>pkt &amp; ~3</code>）。不对齐的话设备算出的总包数和主机不一致，
+        会一直停在"接收中"，<code>0x0401</code> 永远等不到应答——这是最常见的卡死原因。
+        <br><br>
+        <b>3 秒没有任何进展</b>就从当前 acked 回退重发；累计重传过多直接中止。
+      </div>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-h"><span class="no">11</span>校验 <span class="tag">EB 90 · 0x0401 → 0x0402</span></div>
+    <div class="step-b">
+      <div class="ui"><b>界面：</b>日志打 <code>[4] CRC32 校验通过 [OK]</code></div>
+
+      <div class="line"><span class="lbl tx">发</span><div class="hex txb">EB 90 04 01 00 20 BD 42 27 DB 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 02</div></div>
+      <div class="line"><span class="lbl rx">收</span><div class="hex rxb">EB 90 04 02 00 21 00 BD 42 27 DB 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 27</div></div>
+
+      <table class="brk">
+        <thead><tr><th>字节</th><th>值</th><th>含义</th></tr></thead>
+        <tbody>
+          <tr><td class="desc">4-5</td><td class="byt">00 20</td><td class="mean">len = 32</td></tr>
+          <tr><td class="desc">6</td><td class="byt">00</td><td class="mean">status = 0 校验通过</td></tr>
+          <tr class="hi"><td class="desc">7-38</td><td class="byt">BD 42 27 DB 00 ×28</td><td class="mean">设备实算值，<b>必须与发送的逐字节相同</b></td></tr>
+        </tbody>
+      </table>
+
+      <div class="note">
+        设备收完最后一包要<b>先算整片校验</b>，这期间它收不到新帧；而这一帧是 write-without-response，
+        <b>丢了不会自动重传</b>。所以没应答要<b>主动重发</b>——实际是重发 5 次、每次间隔 1.5 s。
+        <br><br>
+        <code>status≠00</code> 说明写入出错，<b>绝对不能发完成帧</b>。
+      </div>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-h"><span class="no">12</span>完成 <span class="tag">EB 90 · 0x0501 → 0x0502</span></div>
+    <div class="step-b">
+      <div class="ui"><b>界面：</b>日志打 <code>0x0501 应答: 0x00</code>，随后设备重启</div>
+
+      <div class="line"><span class="lbl tx">发</span><div class="hex txb">EB 90 05 01 00 00 25</div></div>
+      <div class="line"><span class="lbl rx">收</span><div class="hex rxb">EB 90 05 02 00 01 00 D4</div></div>
+
+      <table class="brk">
+        <thead><tr><th>字节</th><th>值</th><th>含义</th></tr></thead>
+        <tbody>
+          <tr><td class="desc">4-5</td><td class="byt">00 01</td><td class="mean">len = 1</td></tr>
+          <tr class="hi"><td class="desc">6</td><td class="byt">00</td><td class="mean"><b>status：00 = 成功，FF = 应用失败</b></td></tr>
+        </tbody>
+      </table>
+
+      <div class="note">
+        设备在写标志 / 应用期间<b>不消费</b>这一帧，所以没回应是正常的。
+        实际做法：<b>链路断了就重连再发</b>，单次只等 3 s、多发几次，蓝牙板一空下来就能立刻应答。
+      </div>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-h"><span class="no">13</span>复查 <span class="tag">重连 → 0x0610 / 0x20</span></div>
+    <div class="step-b">
+      <div class="ui"><b>界面：</b>日志打 <code>✅ 已确认运行新镜像：96084 B　crc 0xDB2742BD</code>，然后自动再扫一次</div>
+
+      <div class="field"><b>顺序不能错：先断开重连，再查询。</b>复位那一刻旧链路已经死了，直接查会一直失败。</div>
+
+      <div class="line"><span class="lbl tx">发</span><div class="hex txb">EB 90 06 10 00 00 D6</div></div>
+      <div class="field">
+        判读：<code>mode=1</code>（已回 APP）· <code>size=96596</code> · <code>payload_crc=0xDB2742BD</code> 与目标固件一致 → 成功
+      </div>
+
+      <div class="note">
+        实际做法是<b>循环"重连 → 只读查询"最多 40 s</b>。
+        查到 <code>mode=app</code> 但 size/CRC 对不上就报"镜像不符"；镜像没有元数据块时只能报"已回到 APP 但版本未知"。
+      </div>
+
+      <div class="ok">
+        <b>整轮成功的判据只有一条：</b>设备回到 APP，且它自报的 <b>size 和 CRC32</b> 与刚发的固件一致。
+        界面上显示"升级完成"不算数，必须复查通过。
+      </div>
+    </div>
+  </div>
+
+  <h2>七、一整轮真实例子（主控 M，v1.82 → v1.83）</h2>
+
+  <div class="step">
+    <div class="step-b">
+      <div class="field"><b>① 连接</b> → 订阅通知 → MTU 247</div>
+
+      <div class="field"><b>② 扫描设备</b></div>
+      <div class="line"><span class="lbl tx">发</span><div class="hex txb">53 A2 03 00 24 1C 01</div></div>
+      <div class="line"><span class="lbl rx">收</span><div class="hex rxb">54 A1 0D 00 25 01 01 33 39 15 00 AC 4B 02 00 A3 02</div></div>
+      <div class="line"><span class="lbl tx">发</span><div class="hex txb">53 A2 04 00 20 01 1A 01</div></div>
+      <div class="line"><span class="lbl rx">收</span><div class="hex rxb">54 A1 0F 00 21 01 01 01 10 65 FB A0 9A BC B1 00 00 3F 05</div></div>
+      <div class="line"><span class="lbl tx">发</span><div class="hex txb">53 A2 04 00 20 02 1B 01</div></div>
+      <div class="line"><span class="lbl rx">收</span><div class="hex rxb">54 A1 0F 00 21 02 01 01 52 78 56 34 12 54 79 01 00 5D 03</div></div>
+      <div class="line"><span class="lbl tx">发</span><div class="hex txb">53 A2 04 00 22 02 1D 01</div></div>
+      <div class="line"><span class="lbl rx">收</span><div class="hex rxb">54 A1 10 00 23 02 4E 32 53 45 5F 4D 00 00 00 00 00 00 EE 02</div></div>
+
+      <div class="field"><b>③ 刷新在线库</b> → 库里有 M v1.83 / 0xDB2742BD</div>
+
+      <div class="field"><b>④ 核对版本</b></div>
+      <table class="tb">
+        <thead><tr><th>板卡</th><th>型号</th><th>设备版本</th><th>设备 CRC</th><th>库版本</th><th>库 CRC</th><th>结论</th></tr></thead>
+        <tbody>
+          <tr><td>蓝牙板 S</td><td>N2SE_S</td><td>v1.16</td><td>0x9AA0FB65</td><td>v1.16</td><td>0x9AA0FB65</td><td>已是最新</td></tr>
+          <tr><td>主控 M</td><td>N2SE_M</td><td>v1.82</td><td>0x12345678</td><td>v1.83</td><td>0xDB2742BD</td><td><b>需升级</b></td></tr>
+        </tbody>
+      </table>
+
+      <div class="field"><b>⑤ 一键升级</b>（只升 M，S 已是最新自动跳过）</div>
+      <div class="line"><span class="lbl tx">发</span><div class="hex txb">EB 90 06 10 00 00 D6</div></div>
+      <div class="line"><span class="lbl rx">收</span><div class="hex rxb">… 4A 35 53 54 02 01 …</div></div>
+      <div class="field">mode=1 在 APP，容量 104448 B，镜像 96596 B 够用 → 走透传，不断连</div>
+      <div class="line"><span class="lbl tx">发</span><div class="hex txb">EB 90 01 01 00 10 4A 35 31 56 41 2D 4D FF FF FF FF FF FF FF FF FF CE</div></div>
+      <div class="line"><span class="lbl rx">收</span><div class="hex rxb">EB 90 01 02 00 19 00 4A 35 31 56 41 2D 4D FF FF FF FF FF FF FF FF FF 01 83 00 E4 00 98 01 00 83</div></div>
+      <div class="line"><span class="lbl tx">发</span><div class="hex txb">EB 90 02 01 00 26 00 01 79 54 BD 42 27 DB 00 ×28 00 80 43</div></div>
+      <div class="line"><span class="lbl rx">收</span><div class="hex rxb">EB 90 02 02 00 01 00 FD</div></div>
+      <div class="line"><span class="lbl tx">发</span><div class="hex txb">EB 90 03 01 00 06 00 00 02 F3 00 80 79 &lt;128B&gt;</div></div>
+      <div class="line"><span class="lbl rx">收</span><div class="hex rxb">EB 90 03 02 00 03 00 00 00 0E</div></div>
+      <div class="field">…… 重复到第 755 包 ……</div>
+      <div class="line"><span class="lbl tx">发</span><div class="hex txb">EB 90 04 01 00 20 BD 42 27 DB 00 ×28 27</div></div>
+      <div class="line"><span class="lbl rx">收</span><div class="hex rxb">EB 90 04 02 00 21 00 BD 42 27 DB 00 ×28 27</div></div>
+      <div class="line"><span class="lbl tx">发</span><div class="hex txb">EB 90 05 01 00 00 25</div></div>
+      <div class="line"><span class="lbl rx">收</span><div class="hex rxb">EB 90 05 02 00 01 00 D4</div></div>
+
+      <div class="field"><b>⑥ 复查</b></div>
+      <div class="line"><span class="lbl tx">发</span><div class="hex txb">EB 90 06 10 00 00 D6</div></div>
+      <div class="line"><span class="lbl rx">收</span><div class="hex rxb">… 4A 35 53 54 02 01 … size=96596 crc=0xDB2742BD</div></div>
+
+      <div class="ok">
+        <b>整轮约 12 s（755 包）。</b>
+        如果这次也要升蓝牙板 S，会在 M 升完、复查通过之后再走一遍，<b>S 那次会断连重连</b>。
+      </div>
+    </div>
+  </div>
+
+  <h2>八、状态码</h2>
+
+  <table class="tb">
+    <thead><tr><th>码</th><th>含义</th><th>能重试吗</th><th>怎么办</th></tr></thead>
+    <tbody>
+      <tr><td><code>0x00</code></td><td>成功</td><td>—</td><td>继续下一步</td></tr>
+      <tr><td><code>0x10</code></td><td>长度 / 容量错误</td><td><b>能</b></td><td>按 NACK 的 seq 重发</td></tr>
+      <tr><td><code>0x11</code></td><td>校验失败</td><td>否</td><td>停止，重新升级</td></tr>
+      <tr><td><code>0x01</code></td><td>CRC 错误</td><td>否</td><td>检查镜像与校验值</td></tr>
+      <tr><td><code>0x02</code></td><td>Flash 错误</td><td>否</td><td>重来一次，仍失败换板</td></tr>
+      <tr><td><code>0x30</code></td><td>S 通知队列满</td><td>否</td><td>降低发送速率重来</td></tr>
+      <tr><td><code>0x31</code></td><td>S 通知确认重试耗尽</td><td>否</td><td>链路差，靠近设备重来</td></tr>
+      <tr><td><code>0x32</code></td><td>M 串口未就绪</td><td>否</td><td>主控没上电 / 串口不通</td></tr>
+      <tr><td><code>0x33</code></td><td>M 串口写失败</td><td>否</td><td>同上</td></tr>
+      <tr><td><code>0x34</code></td><td>M 串口帧错误</td><td>否</td><td>同上</td></tr>
+      <tr><td><code>0x35</code></td><td>M 未就绪超时</td><td>否</td><td>同上</td></tr>
+      <tr><td><code>0x36</code></td><td>M 进 Boot 超时</td><td>否</td><td>主控没进 boot，重启设备</td></tr>
+      <tr><td><code>0x37</code></td><td>S 数据静默 5 s</td><td>否</td><td>链路中断</td></tr>
+      <tr><td><code>0x38</code></td><td>M 拒绝数据包</td><td>否</td><td>检查包长对齐</td></tr>
+      <tr><td><code>0xE1</code></td><td>硬件码不匹配</td><td>否</td><td>目标选错（M 的帧发给了 S）</td></tr>
+      <tr><td><code>0xFF</code></td><td>未分类错误</td><td>否</td><td>重新进 boot 再升</td></tr>
+    </tbody>
+  </table>
+
+  <div class="tip">
+    <b>只有 0x10 能重发。</b>其余码表示设备已经关闭本轮会话，继续重发只会空转。
+  </div>
+
+  <h2>九、常见失败</h2>
+
+  <div class="warn">
+    <b>点「扫描设备」一直无应答</b> → 先确认蓝牙还连着；<code>0x24</code> 都超时说明链路断了，不是板的问题。<br>
+    <b>表格里某块板"无应答"</b> → 点那一行的「重试」单独重读，不用整轮重扫。<br>
+    <b>握手无应答</b> → 设备不在 boot，或广播名不对 → 先 <code>0x0610</code> 看模式。<br>
+    <b>握手被拒 0xE1</b> → 硬件码发错，M 的帧发给了 S。<br>
+    <b>参数被拒</b> → 镜像超过设备容量（S 约 188 KB，M 约 102 KB）。<br>
+    <b>数据卡住不动</b> → 包长没 4 字节对齐，或 MTU 太小。<br>
+    <b>校验老不过</b> → size 填错 / 固件选错 / 那 32 字节用了真 SHA256 而设备用的是 CRC32+0。<br>
+    <b>发完成没回应</b> → 正常，应用期间不消费；断链就重连再发。<br>
+    <b>复查一直不通过</b> → 没先断开重连就查询，或者设备还停在 boot。
+  </div>
+
+  <div class="tip">
+    <b>为什么 boot 不能 OTA：</b>boot 是负责"接收并写入 APP"的那段代码，它把自己覆盖掉就再也起不来了。
+    现场升级永远只碰 APP 区，boot 只能出厂前用 ST-Link 烧。
+  </div>
+
+</section>
+
+<section id="report" hidden>
+  <div class="placeholder">
+    <b>待写</b>
+    按同样格式：界面点哪里 → 设备主动推哪些帧 → 每条帧逐字节拆解 → 单位换算 → 链路保活。
+  </div>
+</section>
+
+<section id="rod" hidden>
+  <div class="placeholder">
+    <b>待写</b>
+    按同样格式：界面点哪里 → 读状态 → 三片下发 → 提交 → 轮询 → 比对，每条帧逐字节拆解。
+  </div>
+</section>
+
+</main>
+
+<script>
+document.querySelectorAll('.tabs button').forEach(function (b) {
+  b.addEventListener('click', function () {
+    document.querySelectorAll('.tabs button').forEach(function (x) { x.classList.toggle('on', x === b); });
+    document.querySelectorAll('main > section').forEach(function (s) {
+      s.hidden = s.id !== b.dataset.t;
+    });
+    window.scrollTo(0, 0);
+  });
+});
+</script>
+</body>
+</html>
