@@ -1,23 +1,29 @@
-<!doctype html><html lang="zh-CN"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1"><title>J51NG · App 对接说明书</title>
-<style>
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>J51NG · App 对接说明书</title><style>
 :root{--bg:#f2f1e8;--card:#fff;--line:#ddd8c6;--ink:#2b2a25;--muted:#6f6a5c;--accent:#6b7f3a;--code:#f6f5ee}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.65 -apple-system,"PingFang SC","Microsoft YaHei",system-ui,sans-serif}
 .wrap{max-width:900px;margin:0 auto;padding:18px 16px 80px}
-h1{font-size:21px;margin:6px 0 12px} h2{font-size:17px;margin:24px 0 10px;padding-top:10px;border-top:1px solid var(--line)}
-h3{font-size:15px;margin:16px 0 8px} h4{font-size:14px;margin:12px 0 6px}
-p{margin:8px 0} ul,ol{margin:8px 0 8px 22px} li{margin:3px 0}
+h1{font-size:21px;margin:6px 0 12px}
+h2{font-size:17px;margin:24px 0 10px;padding-top:10px;border-top:1px solid var(--line)}
+h3{font-size:15px;margin:16px 0 8px}
+h4{font-size:14px;margin:12px 0 6px}
+p{margin:8px 0}
+ul,ol{margin:8px 0 8px 22px}
+li{margin:3px 0}
 a{color:var(--accent)}
-code{background:var(--code);border:1px solid var(--line);border-radius:4px;padding:1px 4px;font-size:12.5px;font-family:ui-monospace,Consolas,monospace}
-pre{background:#1f2119;color:#e8e6dc;padding:12px 14px;border-radius:10px;overflow-x:auto;font-size:12px;line-height:1.45}
-pre code{background:none;border:0;color:inherit;padding:0;font-size:12px}
-table{border-collapse:collapse;width:100%;margin:10px 0;background:var(--card);font-size:13px;display:block;overflow-x:auto}
+code{background:var(--code);border:1px solid var(--line);border-radius:4px;padding:1px 4px;
+     font-size:12.5px;font-family:ui-monospace,Consolas,monospace}
+pre{background:#1f2119;color:#e8e6dc;padding:12px 14px;border-radius:10px;overflow-x:auto;
+    font-size:12px;line-height:1.45}
+pre code{background:none;border:0;color:inherit;padding:0;font-size:12px;white-space:pre}
+table{border-collapse:collapse;width:100%;margin:10px 0;background:var(--card);font-size:13px;
+      display:block;overflow-x:auto}
 th,td{border:1px solid var(--line);padding:6px 9px;text-align:left;vertical-align:top;white-space:nowrap}
 th{background:var(--code);font-weight:600}
-blockquote{margin:10px 0;padding:9px 12px;border-left:3px solid var(--accent);background:#f7f6ef;color:var(--muted);border-radius:0 8px 8px 0}
+blockquote{margin:10px 0;padding:9px 12px;border-left:3px solid var(--accent);background:#f7f6ef;
+           color:var(--muted);border-radius:0 8px 8px 0}
 hr{border:0;border-top:1px solid var(--line);margin:22px 0}
-@media (max-width:700px){th,td{white-space:normal;word-break:break-word} table{display:table}}
+@media (max-width:700px){th,td{white-space:normal;word-break:break-word}table{display:table}}
 </style></head><body><div class="wrap"><h1>13 · App 对接说明书（协议 + 流程 + 操作）</h1>
 <blockquote>交付对象：App 开发<br>版本基线：主控 M v1.83（<code>0xDB2742BD</code>）· 蓝牙板 S v1.16（<code>0x9AA0FB65</code>）<br>固件日期：2026-11-21<br>本文所有字节序、超时、错误码均来自当前固件实测，不是推测。</blockquote>
 <hr>

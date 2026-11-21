@@ -1,23 +1,29 @@
-<!doctype html><html lang="zh-CN"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1"><title>J51NG · 操作流程图</title>
-<style>
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>J51NG · 操作流程</title><style>
 :root{--bg:#f2f1e8;--card:#fff;--line:#ddd8c6;--ink:#2b2a25;--muted:#6f6a5c;--accent:#6b7f3a;--code:#f6f5ee}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.65 -apple-system,"PingFang SC","Microsoft YaHei",system-ui,sans-serif}
 .wrap{max-width:900px;margin:0 auto;padding:18px 16px 80px}
-h1{font-size:21px;margin:6px 0 12px} h2{font-size:17px;margin:24px 0 10px;padding-top:10px;border-top:1px solid var(--line)}
-h3{font-size:15px;margin:16px 0 8px} h4{font-size:14px;margin:12px 0 6px}
-p{margin:8px 0} ul,ol{margin:8px 0 8px 22px} li{margin:3px 0}
+h1{font-size:21px;margin:6px 0 12px}
+h2{font-size:17px;margin:24px 0 10px;padding-top:10px;border-top:1px solid var(--line)}
+h3{font-size:15px;margin:16px 0 8px}
+h4{font-size:14px;margin:12px 0 6px}
+p{margin:8px 0}
+ul,ol{margin:8px 0 8px 22px}
+li{margin:3px 0}
 a{color:var(--accent)}
-code{background:var(--code);border:1px solid var(--line);border-radius:4px;padding:1px 4px;font-size:12.5px;font-family:ui-monospace,Consolas,monospace}
-pre{background:#1f2119;color:#e8e6dc;padding:12px 14px;border-radius:10px;overflow-x:auto;font-size:12px;line-height:1.45}
-pre code{background:none;border:0;color:inherit;padding:0;font-size:12px}
-table{border-collapse:collapse;width:100%;margin:10px 0;background:var(--card);font-size:13px;display:block;overflow-x:auto}
+code{background:var(--code);border:1px solid var(--line);border-radius:4px;padding:1px 4px;
+     font-size:12.5px;font-family:ui-monospace,Consolas,monospace}
+pre{background:#1f2119;color:#e8e6dc;padding:12px 14px;border-radius:10px;overflow-x:auto;
+    font-size:12px;line-height:1.45}
+pre code{background:none;border:0;color:inherit;padding:0;font-size:12px;white-space:pre}
+table{border-collapse:collapse;width:100%;margin:10px 0;background:var(--card);font-size:13px;
+      display:block;overflow-x:auto}
 th,td{border:1px solid var(--line);padding:6px 9px;text-align:left;vertical-align:top;white-space:nowrap}
 th{background:var(--code);font-weight:600}
-blockquote{margin:10px 0;padding:9px 12px;border-left:3px solid var(--accent);background:#f7f6ef;color:var(--muted);border-radius:0 8px 8px 0}
+blockquote{margin:10px 0;padding:9px 12px;border-left:3px solid var(--accent);background:#f7f6ef;
+           color:var(--muted);border-radius:0 8px 8px 0}
 hr{border:0;border-top:1px solid var(--line);margin:22px 0}
-@media (max-width:700px){th,td{white-space:normal;word-break:break-word} table{display:table}}
+@media (max-width:700px){th,td{white-space:normal;word-break:break-word}table{display:table}}
 </style></head><body><div class="wrap"><h1>J51NG 操作流程（App 用户视角）</h1>
 <blockquote>配套阅读：<a href="PROTOCOL_FLOW.html">PROTOCOL_FLOW.md</a>（帧怎么发）· <a href="APP_PROTOCOL_SPEC.html">APP_PROTOCOL_SPEC.md</a>（字段细节）<br>本文只讲<strong>人在界面上怎么点、点了之后设备发生什么、出问题看到什么</strong>。</blockquote>
 <hr>
