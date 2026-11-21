@@ -53,7 +53,7 @@ hr{border:0;border-top:1px solid var(--line);margin:22px 0}
                &quot;已切换第 5 档 Pro&quot;        &quot;升级完成，已重启&quot;</code></pre>
 <hr>
 <h2>2. 连接页</h2>
-<table><thead><tr><th>界面元素</th><th>点下去发生什么</th><th>成功显示</th><th>失败显示</th></tr></thead><tbody><tr><td>连接</td><td>扫描 <code>AIMTECH*</code> → 连接 → 订阅通知 → 读 MTU</td><td>已连接 + 设备信息</td><td>见下表</td></tr><tr><td>断开</td><td>主动断链（<strong>必须断，否则设备不广播</strong>）</td><td>未连接</td><td>—</td></tr><tr><td>读状态</td><td><code>0x0A</code> + <code>0x20[1]</code> + <code>0x20[2]</code></td><td><code>S v1.16 / M v1.83 / APP 模式</code></td><td>主控未就绪</td></tr></tbody></table>
+<table><thead><tr><th>界面元素</th><th>点下去发生什么</th><th>成功显示</th><th>失败显示</th></tr></thead><tbody><tr><td>连接</td><td>扫描 <code>N2SE-1000J*</code> → 连接 → 订阅通知 → 读 MTU → <code>0x24</code> 读设备 ID</td><td>已连接 + 设备 ID + 设备信息</td><td>见下表</td></tr><tr><td>断开</td><td>主动断链（<strong>必须断，否则设备不广播</strong>）</td><td>未连接</td><td>—</td></tr><tr><td>读状态</td><td><code>0x0A</code> + <code>0x20[1]</code> + <code>0x20[2]</code></td><td><code>S v1.16 / M v1.83 / APP 模式</code></td><td>主控未就绪</td></tr></tbody></table>
 <p><strong>失败提示对照</strong></p>
 <table><thead><tr><th>情况</th><th>提示文案</th></tr></thead><tbody><tr><td>扫不到</td><td>未发现设备：请确认已开机、2 米内、未被其他手机连接</td></tr><tr><td>连上没反应</td><td>设备未就绪：请稍后重试</td></tr><tr><td>主控无应答</td><td>主控未就绪：请等设备启动完成</td></tr><tr><td>连接中途断开</td><td>设备已休眠：请按键唤醒后重连</td></tr></tbody></table>
 <hr>

@@ -45,7 +45,7 @@ sum = (53 + A2 + len_lo + len_hi + cmd + payload 各字节) 之和，取低 16 �
 → 完整帧：53 A2 03 00 0A 02 01</code></pre>
 <blockquote>⚠️ <strong>两种上行帧头都要解析</strong>：<code>54 A1</code> 是主体，另有部分透传应答以 <code>53 A2</code> 帧头到达，格式完全一样。<br>只认一种的表现就是&quot;命令发了、设备回了、App 收不到&quot;。</blockquote>
 <h3>0.3 连接五步（少一步就全哑）</h3>
-<pre><code>① 扫描      名字前缀 &quot;AIMTECH&quot;（备用 &quot;J51NG&quot;）→ 期望 &quot;AIMTECH VHR&quot;
+<pre><code>① 扫描      名字前缀 &quot;N2SE-1000J&quot;（兼容旧名 &quot;AIMTECH&quot;/&quot;J51NG&quot;）→ 期望 &quot;N2SE-1000J&quot;
 ② 连接      Service 00002760-08c2-11e1-9073-0e8ac72e1001
             Write   00002760-08c2-11e1-9073-0e8ac72e0001
             Notify  00002760-08c2-11e1-9073-0e8ac72e0002
@@ -262,7 +262,7 @@ CRC8 = CRC-8/MAXIM（poly 0x07，init 0），校验范围 = type + len + payload
 <h2>附录 B · 时序参数（照抄）</h2>
 <table><thead><tr><th>动作</th><th>超时</th><th>重试</th></tr></thead><tbody><tr><td>扫描连接</td><td>8 s</td><td>3 次（每次重扫）</td></tr><tr><td><code>0x0D</code> 分片</td><td>1 s</td><td>2 次</td></tr><tr><td><code>0x0E</code> 提交轮询</td><td>8 s</td><td>1 次</td></tr><tr><td><code>0x0E</code> 读状态轮询</td><td>4 s</td><td>1 次</td></tr><tr><td><code>0x0F</code> 轮询间隔</td><td>200 ms</td><td>—</td></tr><tr><td>分片间隔</td><td>400~500 ms</td><td>—</td></tr><tr><td>升级握手/参数</td><td>3 s</td><td>2 次</td></tr><tr><td>升级数据包</td><td>2 s</td><td>3 次</td></tr><tr><td>升级完成</td><td>10 s</td><td>20 × 500 ms</td></tr></tbody></table>
 <h2>附录 C · 一次完整会话（逐帧，可对着抓包）</h2>
-<pre><code>[连接] 扫描 AIMTECH* → 连接 → 订阅 CCCD 01 00 → MTU 247
+<pre><code>[连接] 扫描 N2SE-1000J* → 连接 → 订阅 CCCD 01 00 → MTU 247 → 发 0x24 读设备 ID
 
 [认设备]
 → 53 A2 03 00 0A 02 01

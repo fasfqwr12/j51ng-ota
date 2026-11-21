@@ -35,7 +35,7 @@ hr{border:0;border-top:1px solid var(--line);margin:22px 0}
 <hr>
 <h2>1. BLE 连接</h2>
 <h3>1.1 广播与 UUID</h3>
-<table><thead><tr><th>项</th><th>值</th></tr></thead><tbody><tr><td>设备名</td><td><code>AIMTECH VHR</code></td></tr><tr><td>名字前缀（扫描过滤用）</td><td><code>AIMTECH</code>（备用 <code>J51NG</code>）</td></tr><tr><td>Service UUID</td><td><code>00002760-08c2-11e1-9073-0e8ac72e1001</code></td></tr><tr><td>Write Characteristic</td><td><code>00002760-08c2-11e1-9073-0e8ac72e0001</code></td></tr><tr><td>Notify Characteristic</td><td><code>00002760-08c2-11e1-9073-0e8ac72e0002</code></td></tr></tbody></table>
+<table><thead><tr><th>项</th><th>值</th></tr></thead><tbody><tr><td>设备名</td><td><code>N2SE-1000J</code>（型号，所有同型号设备相同）</td></tr><tr><td>名字前缀（扫描过滤用）</td><td><code>N2SE-1000J</code>（兼容旧名 <code>AIMTECH</code> / <code>J51NG</code>）</td></tr><tr><td>个体标识</td><td><strong>MAC 地址</strong>，连接后由 <code>0x24</code> 读取，永久不变</td></tr><tr><td>Service UUID</td><td><code>00002760-08c2-11e1-9073-0e8ac72e1001</code></td></tr><tr><td>Write Characteristic</td><td><code>00002760-08c2-11e1-9073-0e8ac72e0001</code></td></tr><tr><td>Notify Characteristic</td><td><code>00002760-08c2-11e1-9073-0e8ac72e0002</code></td></tr></tbody></table>
 <h3>1.2 连接步骤（照这个顺序做，别省）</h3>
 <pre><code>1) 扫描：按 namePrefix 过滤（不要扫全部再筛）
 2) connect
@@ -109,26 +109,45 @@ fun onNotify(chunk: ByteArray) {
 <hr>
 <h2>3. 命令速查表</h2>
 <h3>3.1 下行命令</h3>
-<table><thead><tr><th>cmd</th><th>名称</th><th>payload</th><th>应答</th></tr></thead><tbody><tr><td><code>0x03</code></td><td>雷达休眠/唤醒（预留，当前无实际动作）</td><td><code>01</code> 唤醒 / <code>02</code> 休眠</td><td>无</td></tr><tr><td><code>0x04</code></td><td>设置当前杆号</td><td><code>club(1) num(1)</code></td><td>无</td></tr><tr><td><code>0x0A</code></td><td>查构建号</td><td>空</td><td><code>0x13</code>（4 B 日期码）</td></tr><tr><td><code>0x0D</code></td><td>杆包表分片写入</td><td><code>off_lo off_hi n data[n]</code>（n ≤ 28）</td><td><code>0x15</code>，ack=<code>0x01</code></td></tr><tr><td><code>0x0E</code></td><td>杆包表命令</td><td><code>01</code> 提交 / <code>02</code> 恢复默认 / <code>03</code> 擦除 / <code>04</code> 查状态</td><td>需再发 <code>0x0F</code> 取结果</td></tr><tr><td><code>0x0F</code></td><td>取杆包表结果</td><td>空</td><td><code>0x15</code>（6 B）</td></tr><tr><td><code>0x20</code></td><td>查板卡描述</td><td><code>id</code>：<code>1</code>=S蓝牙板 <code>2</code>=M主控</td><td><code>0x21</code>（12 B）</td></tr><tr><td><code>0x21</code></td><td>查板卡型号</td><td><code>id</code> 同上</td><td><code>0x22</code>（13 B）</td></tr></tbody></table>
+<table><thead><tr><th>cmd</th><th>名称</th><th>payload</th><th>应答</th></tr></thead><tbody><tr><td><code>0x03</code></td><td>雷达休眠/唤醒（预留，当前无实际动作）</td><td><code>01</code> 唤醒 / <code>02</code> 休眠</td><td>无</td></tr><tr><td><code>0x04</code></td><td>设置当前杆号</td><td><code>club(1) num(1)</code></td><td>无</td></tr><tr><td><code>0x0A</code></td><td>查构建号</td><td>空</td><td><code>0x13</code>（4 B 日期码）</td></tr><tr><td><code>0x0D</code></td><td>杆包表分片写入</td><td><code>off_lo off_hi n data[n]</code>（n ≤ 28）</td><td><code>0x15</code>，ack=<code>0x01</code></td></tr><tr><td><code>0x0E</code></td><td>杆包表命令</td><td><code>01</code> 提交 / <code>02</code> 恢复默认 / <code>03</code> 擦除 / <code>04</code> 查状态</td><td>需再发 <code>0x0F</code> 取结果</td></tr><tr><td><code>0x0F</code></td><td>取杆包表结果</td><td>空</td><td><code>0x15</code>（6 B）</td></tr><tr><td><code>0x20</code></td><td>查板卡描述</td><td><code>id</code>：<code>1</code>=S蓝牙板 <code>2</code>=M主控</td><td><code>0x21</code>（12 B）</td></tr><tr><td><code>0x22</code></td><td>查板卡型号</td><td><code>id</code> 同上</td><td><code>0x23</code>（13 B）</td></tr><tr><td><code>0x24</code></td><td><strong>查设备 ID（板卡清单）</strong></td><td>空</td><td><code>0x25</code>（10 B），见 3.4</td></tr></tbody></table>
 <h3>3.2 主动上报（<code>54 A1</code>）</h3>
-<table><thead><tr><th>cmd</th><th>内容</th><th>长度</th><th>说明</th></tr></thead><tbody><tr><td><code>0x03</code></td><td>球速</td><td>8 B</td><td>原生字节，暂未定标</td></tr><tr><td><code>0x06</code></td><td>电量</td><td>1 B</td><td><code>0</code>~<code>4</code> 格</td></tr><tr><td><code>0x07</code></td><td>距离 / 两点距</td><td>2 B <strong>小端</strong></td><td>单位 <strong>分米（dm）</strong>，<code>/10</code> 得米</td></tr><tr><td><code>0x08</code></td><td>坡度</td><td>2 B 小端</td><td>dm</td></tr><tr><td><code>0x09</code></td><td>垂直高差</td><td>2 B 小端</td><td>dm</td></tr><tr><td><code>0x0A</code></td><td>推荐杆</td><td>2 B 小端</td><td>杆号，见 3.4</td></tr><tr><td><code>0x0B</code></td><td>雷达开关状态</td><td>1 B</td><td></td></tr><tr><td><code>0x0C</code></td><td>测量模式</td><td>1 B</td><td><code>0</code>=单点 <code>1</code>=两点</td></tr><tr><td><code>0x13</code></td><td>版本</td><td>4 B</td><td>见 3.3</td></tr></tbody></table>
+<table><thead><tr><th>cmd</th><th>内容</th><th>长度</th><th>说明</th></tr></thead><tbody><tr><td><code>0x03</code></td><td>球速</td><td>8 B</td><td>原生字节，暂未定标</td></tr><tr><td><code>0x06</code></td><td>电量</td><td>1 B</td><td><code>0</code>~<code>4</code> 格</td></tr><tr><td><code>0x07</code></td><td>距离 / 两点距</td><td>2 B <strong>小端</strong></td><td>单位 <strong>分米（dm）</strong>，<code>/10</code> 得米</td></tr><tr><td><code>0x08</code></td><td>坡度</td><td>2 B 小端</td><td>dm</td></tr><tr><td><code>0x09</code></td><td>垂直高差</td><td>2 B 小端</td><td>dm</td></tr><tr><td><code>0x0A</code></td><td>推荐杆</td><td>2 B 小端</td><td>杆号，见 3.4</td></tr><tr><td><code>0x0B</code></td><td>雷达开关状态</td><td>1 B</td><td></td></tr><tr><td><code>0x0C</code></td><td>测量模式</td><td>1 B</td><td><code>0</code>=单点 <code>1</code>=两点</td></tr><tr><td><code>0x13</code></td><td>版本</td><td>4 B</td><td>见 3.3</td></tr><tr><td><code>0x21</code></td><td>板卡描述应答</td><td>12 B</td><td>见 3.3</td></tr><tr><td><code>0x23</code></td><td>板卡型号应答</td><td>13 B</td><td>见 3.3</td></tr><tr><td><code>0x25</code></td><td><strong>设备 ID 应答</strong></td><td>10 B</td><td>见 3.4</td></tr></tbody></table>
 <h3>3.3 版本帧 <code>0x13</code> / 板卡描述 <code>0x21</code> / 型号 <code>0x22</code></h3>
 <pre><code>0x13 (4B):  uint32 小端「构建号」，形如 2026081401（YYYYMMDDnn）
 0x21 (12B): id(1) stage(1) fw_major(1) fw_minor(1) crc32(4,LE) size(4,LE)
             stage: 0 = 运行在 APP，1 = 运行在 BOOT
 0x22 (13B): id(1) model(12, ASCII，如 &quot;N2SE_S&quot;)</code></pre>
 <blockquote>⚠️ <strong><code>0x13</code> 是构建日期码，不是固件版本</strong>。界面上要显示的 <code>v1.16</code> 这种版本号，<br>必须从 <code>0x20</code> → <code>0x21</code> 的 <code>fw_major/fw_minor</code> 取。<br><code>0x20</code>/<code>0x21</code> 也是判断&quot;设备当前在跑 APP 还是 BOOT&quot;的唯一方式，<strong>升级前后都应各查一次</strong>做对比。</blockquote>
-<h3>3.4 杆号编码（推荐杆 <code>0x0A</code> 与设置杆号 <code>0x04</code> 共用）</h3>
+<h3>3.4 设备 ID <code>0x24</code> → <code>0x25</code>（多设备必须做）</h3>
+<p>蓝牙名是<strong>型号</strong>，同型号所有设备一模一样，靠它区分不了个体。<strong>设备 ID 必须连上后读</strong>。</p>
+<pre><code>下行  53 A2 03 00 24 1C 01                          发 0x24，无 payload
+上行  54 A1 0D 00 25 01 01 33 39 15 00 AC 4B 02 00 A3 02
+                    │  │  └──── MAC 小端 6 字节 ────┘  │  └─ 板 ID 列表
+                    │  └─ 机型：1 = N2SE     └─ 板数
+                    └─ cmd 0x25</code></pre>
+<p><code>0x25</code> payload 10 字节：</p>
+<table><thead><tr><th>偏移</th><th>长度</th><th>含义</th></tr></thead><tbody><tr><td>0</td><td>1</td><td>板数（本机挂了几块板）</td></tr><tr><td>1</td><td>1</td><td>机型（1 = N2SE）</td></tr><tr><td>2</td><td>6</td><td><strong>MAC，小端存储</strong></td></tr><tr><td>8</td><td>2</td><td>板 ID 列表，每个 1 字节</td></tr></tbody></table>
+<p><strong>MAC 要反序再显示</strong>：</p>
+<pre><code>const mac = Array.from(payload.slice(2, 8)).reverse()
+  .map(b =&gt; b.toString(16).padStart(2, &#x27;0&#x27;).toUpperCase()).join(&#x27;:&#x27;);
+// 33 39 15 00 AC 4B  →  &quot;4B:AC:00:15:39:33&quot;</code></pre>
+<p><strong>为什么必须读这个</strong>：</p>
+<ul><li>这个 MAC 是芯片出厂地址（<code>GAPM_STATIC_ADDR</code>），<strong>重启、升级都不会变</strong>，可以当设备主键存库。</li><li>Web Bluetooth 拿不到真 MAC（<code>device.id</code> 是浏览器自己的随机 UUID，换浏览器就变），<strong>只能用 <code>0x24</code></strong>。</li><li>现场两台同型号设备，名字完全一样，不读 MAC 就没法知道连的是哪台。</li></ul>
+<p><strong>兜底</strong>：老固件不回 <code>0x25</code> 时，用 <code>device.address</code> / <code>device.id</code> 顶上，并在界面上标&quot;未校准&quot;， 不要把浏览器 ID 当权威 ID 写进库。</p>
+<h3>3.5 杆号编码（推荐杆 <code>0x0A</code> 与设置杆号 <code>0x04</code> 共用）</h3>
 <table><thead><tr><th>值</th><th>杆</th><th>值</th><th>杆</th><th>值</th><th>杆</th></tr></thead><tbody><tr><td><code>0x00</code></td><td>W1</td><td><code>0x06</code></td><td>H5</td><td><code>0x0C</code></td><td>I7</td></tr><tr><td><code>0x01</code></td><td>W3</td><td><code>0x07</code></td><td>H6</td><td><code>0x0D</code></td><td>I8</td></tr><tr><td><code>0x02</code></td><td>W5</td><td><code>0x08</code></td><td>I3</td><td><code>0x0E</code></td><td>I9</td></tr><tr><td><code>0x03</code></td><td>W7</td><td><code>0x09</code></td><td>I4</td><td><code>0x0F</code></td><td>PW</td></tr><tr><td><code>0x04</code></td><td>H3</td><td><code>0x0A</code></td><td>I5</td><td><code>0x10</code></td><td>GW</td></tr><tr><td><code>0x05</code></td><td>H4</td><td><code>0x0B</code></td><td>I6</td><td><code>0x11</code></td><td>SW</td></tr><tr><td><code>0x12</code></td><td>LW</td><td><code>0x13</code></td><td>AW</td><td><code>0x14</code></td><td>Pt</td></tr><tr><td><code>0xEF</code></td><td>无推荐</td><td></td><td></td><td></td><td></td></tr></tbody></table>
 <hr>
 <h2>4. 流程 A：连接后读设备信息</h2>
 <pre><code>连接成功
+  → 0x24                → 收 0x25：设备 ID（MAC）+ 板数      ← 先读这个，多设备靠它区分
   → 0x0A                → 收 0x13：S 的构建号（日期码，不是 vX.YY）
   → 0x20 [0x01]         → 收 0x21：S 的描述（含 crc32 / size / stage）
   → 0x20 [0x02]         → 收 0x21：M 的描述
-  → 0x21 [0x01] / [0x02]→ 收 0x22：型号字符串</code></pre>
-<p>界面显示建议：<code>S v1.16 / M v1.83</code>、<code>当前模式 APP/BOOT</code>、<code>CRC</code>。</p>
+  → 0x22 [0x01] / [0x02]→ 收 0x23：型号字符串</code></pre>
+<p>界面显示建议：<code>设备 ID 4B:AC:00:15:39:33</code>、<code>S v1.17 / M v1.83</code>、<code>当前模式 APP/BOOT</code>、<code>CRC</code>。</p>
 <blockquote>若 <code>0x20 [0x02]</code> 一直拿不到 → 说明 S 还没和 M 握上手（M 未上电或串口没通），此时应提示&quot;主控未就绪&quot;，而不是&quot;设备异常&quot;。</blockquote>
+<p>&gt;</p>
+<blockquote>若 <code>0x24</code> 没回 <code>0x25</code>（老固件）→ 用连接时的 <code>device.address</code> 兜底，界面上标&quot;未校准&quot;，<strong>不要</strong>静默当成正式 ID。</blockquote>
 <hr>
 <h2>5. 流程 B：测距数据订阅</h2>
 <p>订阅通知后，S 会不定时推 <code>54 A1</code>。App 只需要被动接收 + 解析，不用轮询。</p>
@@ -206,7 +225,7 @@ CRC8 = CRC-8/MAXIM（poly 0x07, init 0），校验范围 = type + len + payload<
 <hr>
 <h2>10. App 操作说明（界面与文案）</h2>
 <h3>10.1 首页 / 连接</h3>
-<table><thead><tr><th>元素</th><th>行为</th></tr></thead><tbody><tr><td>连接按钮</td><td>扫描 <code>AIMTECH*</code> → 连接 → 订阅 → 显示&quot;已连接&quot;</td></tr><tr><td>状态行</td><td><code>设备名 · 模式(APP/BOOT) · 版本 · CRC</code></td></tr><tr><td>断开按钮</td><td>主动断开，释放链路（<strong>不释放会导致设备不再广播</strong>）</td></tr></tbody></table>
+<table><thead><tr><th>元素</th><th>行为</th></tr></thead><tbody><tr><td>连接按钮</td><td>扫描 <code>N2SE-1000J*</code> → 连接 → 订阅 → <code>0x24</code> 读设备 ID → 显示&quot;已连接&quot;</td></tr><tr><td>状态行</td><td><code>设备名 · 模式(APP/BOOT) · 版本 · CRC</code></td></tr><tr><td>断开按钮</td><td>主动断开，释放链路（<strong>不释放会导致设备不再广播</strong>）</td></tr></tbody></table>
 <p><strong>失败文案对照</strong></p>
 <table><thead><tr><th>情况</th><th>文案</th></tr></thead><tbody><tr><td>扫不到</td><td>未发现设备：请确认设备已开机、未被其他手机连接</td></tr><tr><td>连上但无应答</td><td>设备未就绪：请稍后重试</td></tr><tr><td><code>0x91</code></td><td>主控未就绪：请等设备启动完成</td></tr><tr><td><code>0xE1</code></td><td>主控无应答：请重试</td></tr></tbody></table>
 <h3>10.2 杆包页（自定义 Pro）</h3>
@@ -217,7 +236,7 @@ CRC8 = CRC-8/MAXIM（poly 0x07, init 0），校验范围 = type + len + payload<
 <table><thead><tr><th>元素</th><th>行为</th></tr></thead><tbody><tr><td>扫描设备</td><td>读 S/M 版本与 CRC（<code>0x20</code>）</td></tr><tr><td>选择固件</td><td>本地 <code>.bin</code>，显示版本/大小/CRC</td></tr><tr><td>开始升级</td><td>7.4 流程，显示进度条与包计数</td></tr><tr><td>中止</td><td>发 <code>0x0501</code> 失败即放弃，设备留在 boot，下次可重试</td></tr></tbody></table>
 <hr>
 <h2>11. 自测清单（逐条打勾）</h2>
-<ul><li>[ ] 扫描能发现 <code>AIMTECH VHR</code>，连接 &lt; 2 s</li><li>[ ] 不订阅通知时命令无应答（确认订阅是必须的）</li><li>[ ] <code>0x0A</code> 能读回 4 字节版本，与设备屏幕一致</li><li>[ ] <code>0x20[1]</code> / <code>0x20[2]</code> 都能返回 12 字节，<code>stage</code> 正确</li><li>[ ] 测距一枪，能收到 <code>0x07</code> 距离、<code>0x0A</code> 推荐杆</li><li>[ ] 杆包读状态返回 <code>valid=1 count=13 crc=…</code></li><li>[ ] 杆包下发后 <code>本地 crc == 主控 crc</code>，且设备自动切第 5 档</li><li>[ ] 故意改坏一个字节再下发 → 主控<strong>拒收</strong>，CRC 不变（防写坏机制）</li><li>[ ] 升级主控：755 包左右，12 s 内完成，重启后版本变更</li><li>[ ] 升级蓝牙板：360 包左右，完成自动重连，版本变更</li><li>[ ] 升级中禁用杆包按钮（互斥）</li><li>[ ] 断开连接后重新扫描能再次发现设备</li></ul>
+<ul><li>[ ] 扫描能发现 <code>N2SE-1000J</code>，连接 &lt; 2 s</li><li>[ ] 连接后 <code>0x24</code> 读回的 MAC 与 <code>device.address</code> 一致</li><li>[ ] 不订阅通知时命令无应答（确认订阅是必须的）</li><li>[ ] <code>0x0A</code> 能读回 4 字节版本，与设备屏幕一致</li><li>[ ] <code>0x20[1]</code> / <code>0x20[2]</code> 都能返回 12 字节，<code>stage</code> 正确</li><li>[ ] 测距一枪，能收到 <code>0x07</code> 距离、<code>0x0A</code> 推荐杆</li><li>[ ] 杆包读状态返回 <code>valid=1 count=13 crc=…</code></li><li>[ ] 杆包下发后 <code>本地 crc == 主控 crc</code>，且设备自动切第 5 档</li><li>[ ] 故意改坏一个字节再下发 → 主控<strong>拒收</strong>，CRC 不变（防写坏机制）</li><li>[ ] 升级主控：755 包左右，12 s 内完成，重启后版本变更</li><li>[ ] 升级蓝牙板：360 包左右，完成自动重连，版本变更</li><li>[ ] 升级中禁用杆包按钮（互斥）</li><li>[ ] 断开连接后重新扫描能再次发现设备</li></ul>
 <hr>
 <h2>12. FAQ / 排错</h2>
 <table><thead><tr><th>现象</th><th>原因</th><th>处理</th></tr></thead><tbody><tr><td>命令发出去无任何回帧</td><td>没订阅通知 / 写方式用了 write-with-response</td><td>见 1.2 / 1.3</td></tr><tr><td>只能收到部分回帧</td><td>解析器只认 <code>54A1</code>，没认 <code>53A2</code></td><td>两种帧头都要解析</td></tr><tr><td>长帧解析乱码</td><td>没做流式拼包</td><td>按 len 累计再解析</td></tr><tr><td>扫描偶发扫不到</td><td>设备已被连接 / 已自动关机</td><td>先断开、按键唤醒</td></tr><tr><td>杆包提交老 <code>0xE1</code></td><td>主控忙或总线撞车</td><td>重试一次；仍失败看是否刚上电</td></tr><tr><td>升级卡在握手</td><td>设备还在 APP 没进 boot</td><td>先发 <code>53 A2 04 00 FF 01 F9 01</code></td></tr><tr><td>升级后连不上</td><td>S 正在重启广播</td><td>等 2 s 再扫</td></tr><tr><td>下发后设备档位变了</td><td>这是<strong>设计行为</strong>：提交成功自动切第 5 档</td><td>不需要额外处理</td></tr></tbody></table>

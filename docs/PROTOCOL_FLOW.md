@@ -44,7 +44,7 @@ sum = (53 + A2 + len_lo + len_hi + cmd + payload 各字节) 之和，取低 16 �
 ### 0.3 连接五步（少一步就全哑）
 
 ```text
-① 扫描      名字前缀 "AIMTECH"（备用 "J51NG"）→ 期望 "AIMTECH VHR"
+① 扫描      名字前缀 "N2SE-1000J"（兼容旧名 "AIMTECH"/"J51NG"）→ 期望 "N2SE-1000J"
 ② 连接      Service 00002760-08c2-11e1-9073-0e8ac72e1001
             Write   00002760-08c2-11e1-9073-0e8ac72e0001
             Notify  00002760-08c2-11e1-9073-0e8ac72e0002
@@ -474,7 +474,7 @@ CRC8 = CRC-8/MAXIM（poly 0x07，init 0），校验范围 = type + len + payload
 ## 附录 C · 一次完整会话（逐帧，可对着抓包）
 
 ```text
-[连接] 扫描 AIMTECH* → 连接 → 订阅 CCCD 01 00 → MTU 247
+[连接] 扫描 N2SE-1000J* → 连接 → 订阅 CCCD 01 00 → MTU 247 → 发 0x24 读设备 ID
 
 [认设备]
 → 53 A2 03 00 0A 02 01
