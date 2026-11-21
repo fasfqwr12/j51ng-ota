@@ -808,6 +808,15 @@ EB 90 03 03 ...   NACK —— 从该 seq 重发</div></div>
 </main>
 
 <script>
+/* 在控制台的 iframe 里打开时，把自身高度报给父窗口：内部切 tab 后外层也跟着变高 */
+function __reportH() {
+  try {
+    var h = Math.max(document.body.scrollHeight, document.documentElement.scrollHeight, document.body.offsetHeight);
+    parent.postMessage({ __doc: "protocol-tabs", h: h }, "*");
+  } catch (e) {}
+}
+window.addEventListener("load", function () { __reportH(); setTimeout(__reportH, 60); });
+
 document.querySelectorAll('.tabs button').forEach(function (b) {
   b.addEventListener('click', function () {
     document.querySelectorAll('.tabs button').forEach(function (x) { x.classList.toggle('on', x === b); });
@@ -815,6 +824,8 @@ document.querySelectorAll('.tabs button').forEach(function (b) {
       s.hidden = s.id !== b.dataset.t;
     });
     window.scrollTo(0, 0);
+    __reportH();                 /* 高度变了要告诉外层 iframe */
+    setTimeout(__reportH, 60);
   });
 });
 </script>

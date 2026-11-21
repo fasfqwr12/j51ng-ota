@@ -240,14 +240,32 @@
 
 <div class="wrap" id="pane-docs" hidden>
       <div class="docsbar">
-        <button class="dtab on" data-doc="./docs/app-handover.html">说明书</button>
-        <button class="dtab" data-doc="./docs/protocol-flow.html">协议流程</button>
-        <button class="dtab" data-doc="./docs/app-operation.html">操作流程</button>
+        <button class="dtab on" data-doc="./docs/protocol-tabs.html">协议与流程</button>
       </div>
       <div class="card" style="padding:0;overflow:hidden">
-        <iframe id="docsFrame" src="./docs/app-handover.html" title="J51NG 资料" onload="this.style.height=(this.contentWindow.document.documentElement.scrollHeight+24)+'px'"
+        <iframe id="docsFrame" src="./docs/protocol-tabs.html" title="J51NG 资料"
                 style="width:100%;height:calc(100vh - 210px);min-height:520px;border:0;display:block;background:#fff"></iframe>
       </div>
+      <script>
+        /* 文档内部有自己的 tab，切换后高度会变：由文档把高度 postMessage 上来再重设，
+         * 否则切到短的那一页会留一大片空白。只认同一个 iframe 发来的消息。
+         * 注意：本面板默认 hidden，iframe 加载时高度量出来是 0，所以切到本页时要主动让它重报一次。 */
+        window.addEventListener("message", function (ev) {
+          var f = document.getElementById("docsFrame");
+          if (!f || ev.source !== f.contentWindow || !ev.data || ev.data.__doc !== "protocol-tabs") return;
+          if (!ev.data.h || ev.data.h < 400) return;          /* 0 / 量不到就别改，保住 min-height */
+          f.style.height = (ev.data.h + 24) + "px";
+        });
+        document.querySelectorAll(".tab").forEach(function (b) {
+          if (b.dataset.tab !== "docs") return;
+          b.addEventListener("click", function () {
+            var f = document.getElementById("docsFrame");
+            [60, 400].forEach(function (ms) {
+              setTimeout(function () { try { f.contentWindow.__reportH(); } catch (e) {} }, ms);
+            });
+          });
+        });
+      </script>
     </div>
 
     <script type="module" src="./src/app.js?v=82"></script>
