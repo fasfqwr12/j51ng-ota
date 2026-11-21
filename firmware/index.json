@@ -1,5 +1,5 @@
 {
-  "updated": 1795232238,
+  "updated": 1795233209,
   "items": [
     {
       "file": "M_app_latest.bin",
@@ -22,16 +22,16 @@
       "role": "app",
       "target": "S",
       "targetName": "蓝牙板 S",
-      "title": "N2SE_S APP v1.14 crc=0x8CF6C40C",
-      "size": 45988,
-      "fileSize": 45988,
-      "sha256": "d9360448f6532a0f60f678644cd3ecbc3cf205443fc98dd31f4d9ebe2069418b",
-      "version": "v1.14",
+      "title": "N2SE_S APP v1.15 crc=0x67B80996",
+      "size": 46012,
+      "fileSize": 46012,
+      "sha256": "bf56a93b8470f4d649c99442d708c866a9c2a64a3bf2a5753fc1bea8b3b988e3",
+      "version": "v1.15",
       "model": "N2SE_S",
-      "appCrc": "0x8CF6C40C",
-      "codeSize": 45476,
+      "appCrc": "0x67B80996",
+      "codeSize": 45500,
       "imgType": 0,
-      "mtime": 1795229299.0071993
+      "mtime": 1795233209.8741384
     }
   ]
 }
