@@ -1413,7 +1413,13 @@ async function apiLink(operation){
     log("蓝牙操作失败："+msg,"err");
     await syncApiState();
     throw e;
-  }finally{ if(earlyPoll) clearInterval(earlyPoll); apiLinkBusy=false; refreshGo(); }
+  }finally{
+    if(earlyPoll) clearInterval(earlyPoll);
+    /* 连接够快时 tick 那句会残留，收尾时清掉 */
+    if(/^正在扫描并连接…/.test($("hMeta").textContent))
+      $("hMeta").textContent = apiBle && apiBle.connected ? "已连接" : "点击连接蓝牙";
+    apiLinkBusy=false; refreshGo();
+  }
 }
 async function syncApiState(){
   if(!LOCAL_API) return;
