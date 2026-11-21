@@ -229,6 +229,15 @@
         const want = btn.dataset.tab;
         document.querySelectorAll(".tab").forEach((b) => b.classList.toggle("on", b === btn));
       window.scrollTo(0, 0);          /* 换页回到顶部，别停在上一页的滚动位置 */
+
+    /* 资料页三份文档切换 */
+    document.querySelectorAll(".dtab").forEach((b2) => {
+      b2.addEventListener("click", () => {
+        document.querySelectorAll(".dtab").forEach((x) => x.classList.toggle("on", x === b2));
+        const f = $("docsFrame");
+        if (f && b2.dataset.doc) f.src = b2.dataset.doc;
+      });
+    });
         Object.entries(panes).forEach(([k, el]) => { if (el) el.hidden = k !== want; });
         if (dock) dock.hidden = want !== "ota";
       });

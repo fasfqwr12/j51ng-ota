@@ -270,3 +270,9 @@ button.soft{background:transparent}
   .kv{grid-template-columns:76px 1fr;font-size:12px}
   .stats{grid-template-columns:repeat(2,1fr)}
 }
+
+/* 资料页：三份文档切换（2026-11-21） */
+.docsbar{display:flex;gap:8px;margin:0 0 10px;flex-wrap:wrap}
+.dtab{padding:7px 16px;border-radius:10px;border:1px solid var(--line);background:var(--card);
+      color:var(--ink);font-size:13px;cursor:pointer}
+.dtab.on{background:var(--accent-soft,#eef1e2);color:var(--accent);border-color:var(--accent);font-weight:600}

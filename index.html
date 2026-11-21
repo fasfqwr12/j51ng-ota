@@ -8,7 +8,7 @@
 <link rel="manifest" href="./manifest.webmanifest">
 <link rel="icon" type="image/svg+xml" href="./assets/icon.svg">
 <link rel="apple-touch-icon" href="./assets/icon-192.png">
-<link rel="stylesheet" href="./src/app.css?v=48">
+<link rel="stylesheet" href="./src/app.css?v=49">
 </head>
 <body>
 
@@ -239,14 +239,19 @@
 </div>
 
 <div class="wrap" id="pane-docs" hidden>
+      <div class="docsbar">
+        <button class="dtab on" data-doc="./docs/app-handover.html">说明书</button>
+        <button class="dtab" data-doc="./docs/protocol-flow.html">协议流程</button>
+        <button class="dtab" data-doc="./docs/app-operation.html">操作流程</button>
+      </div>
       <div class="card" style="padding:0;overflow:hidden">
-        <iframe src="./docs/app-handover.html" title="App 对接说明书"
-                style="width:100%;height:calc(100vh - 170px);min-height:520px;border:0;display:block;background:#fff"></iframe>
+        <iframe id="docsFrame" src="./docs/app-handover.html" title="J51NG 资料" onload="this.style.height=(this.contentWindow.document.documentElement.scrollHeight+24)+'px'"
+                style="width:100%;height:calc(100vh - 210px);min-height:520px;border:0;display:block;background:#fff"></iframe>
       </div>
     </div>
 
     <script type="module" src="./src/app.js?v=79"></script>
-<script type="module" src="./src/board.js?v=4"></script>
+<script type="module" src="./src/board.js?v=5"></script>
 <script type="module" src="./src/rod.js?v=2"></script>
 <script type="module" src="./src/upgrade.js?v=12"></script>
 <script src="./api-live.js?v=4"></script>
