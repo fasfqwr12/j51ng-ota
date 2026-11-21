@@ -1,0 +1,352 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>J51NG 协议与流程</title>
+<style>
+:root{
+  --bg:#f2f1e8; --card:#fff; --line:#ddd8c6; --ink:#2b2a25; --muted:#6f6a5c;
+  --accent:#6b7f3a; --accent-soft:#eef1e2; --code-bg:#1f2119; --code-ink:#e8e6dc;
+  --tx:#2f6b3a; --rx:#7a5a1e; --warn:#b3352c;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);
+     font:15px/1.65 -apple-system,"PingFang SC","Microsoft YaHei",system-ui,sans-serif}
+header{position:sticky;top:0;z-index:9;background:var(--bg);border-bottom:1px solid var(--line)}
+.hd{max-width:920px;margin:0 auto;padding:12px 16px 0}
+h1{font-size:18px;margin:0 0 10px}
+h1 small{font-weight:400;color:var(--muted);font-size:12.5px;margin-left:8px}
+.tabs{display:flex;gap:6px;flex-wrap:wrap;padding-bottom:10px}
+.tabs button{padding:8px 16px;border-radius:10px;border:1px solid var(--line);
+  background:var(--card);color:var(--ink);font-size:13.5px;cursor:pointer;font-family:inherit}
+.tabs button.on{background:var(--accent-soft);color:var(--accent);border-color:var(--accent);font-weight:600}
+main{max-width:920px;margin:0 auto;padding:18px 16px 90px}
+h2{font-size:17px;margin:26px 0 12px;padding-top:12px;border-top:1px solid var(--line)}
+h2:first-child{border-top:0;padding-top:0;margin-top:0}
+h3{font-size:15px;margin:18px 0 8px}
+p{margin:8px 0}
+.lead{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin:0 0 6px}
+.lead b{color:var(--accent)}
+
+/* ---------- 流程图 ---------- */
+.flow{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px 14px;margin:12px 0}
+.fnode{position:relative;border:1.5px solid var(--line);border-radius:10px;padding:9px 12px;
+       background:#fbfaf4;font-size:13.5px}
+.fnode .fn-t{font-weight:600}
+.fnode .fn-d{color:var(--muted);font-size:12.5px;margin-top:2px}
+.fnode .fn-h{display:inline-block;font:600 11px/1 ui-monospace,Consolas,monospace;
+             background:var(--accent);color:#fff;border-radius:5px;padding:3px 5px;margin-right:7px;
+             vertical-align:1px}
+.fnode.go{background:var(--accent-soft);border-color:var(--accent)}
+.fnode.wait{background:#fdf6e3;border-color:#e0c268}
+.fnode.bad{background:#fdf1ef;border-color:#e5a79f}
+.farrow{height:20px;margin-left:22px;border-left:2px dashed #b9b3a0;position:relative}
+.farrow::after{content:"";position:absolute;left:-5px;bottom:-1px;border:4px solid transparent;
+               border-top:6px solid #b9b3a0}
+.farrow span{position:absolute;left:10px;top:2px;font-size:11.5px;color:var(--muted);white-space:nowrap}
+.fbranch{margin:10px 0 0 22px;padding:8px 10px;border-left:3px solid var(--warn);
+         background:#fdf1ef;border-radius:0 8px 8px 0;font-size:12.5px;color:#7a2f27}
+
+/* ---------- 步骤卡 ---------- */
+.step{background:var(--card);border:1px solid var(--line);border-radius:12px;
+      padding:0;margin:12px 0;overflow:hidden}
+.step-h{display:flex;align-items:center;gap:9px;padding:10px 14px;background:#f7f6ef;
+        border-bottom:1px solid var(--line);font-weight:600;font-size:14px}
+.step-h .no{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;
+            border-radius:6px;background:var(--accent);color:#fff;font:600 12px/1 ui-monospace,monospace}
+.step-h .tag{margin-left:auto;font:400 11.5px ui-monospace,monospace;color:var(--muted)}
+.step-b{padding:12px 14px}
+.line{display:flex;gap:9px;align-items:flex-start;margin:9px 0}
+.line:first-child{margin-top:0}
+.lbl{flex:0 0 34px;font-size:12px;font-weight:600;padding-top:3px}
+.lbl.tx{color:var(--tx)} .lbl.rx{color:var(--rx)}
+.hex{flex:1;min-width:0;background:var(--code-bg);color:var(--code-ink);border-radius:8px;
+     padding:8px 10px;font:12.5px/1.55 ui-monospace,Consolas,monospace;
+     overflow-x:auto;white-space:pre}
+.hex.txb{border-left:3px solid #4a8f57}
+.hex.rxb{border-left:3px solid #c39a3f}
+.note{color:var(--muted);font-size:12.5px;margin:9px 0 0;padding-top:9px;border-top:1px dashed var(--line)}
+.note b{color:var(--ink);font-weight:600}
+.field{margin:8px 0 0;font-size:13px}
+.field code{background:#f2f1e8;border:1px solid var(--line);border-radius:4px;padding:1px 5px;
+            font:12px ui-monospace,Consolas,monospace}
+
+/* ---------- 表格 ---------- */
+table{border-collapse:collapse;width:100%;margin:10px 0;background:var(--card);font-size:13px;
+      display:block;overflow-x:auto}
+th,td{border:1px solid var(--line);padding:7px 10px;text-align:left;vertical-align:top;white-space:nowrap}
+th{background:#f7f6ef;font-weight:600}
+td code{background:#f2f1e8;border-radius:4px;padding:1px 5px;font:12px ui-monospace,Consolas,monospace}
+
+/* ---------- 提示块 ---------- */
+.warn{background:#fdf1ef;border-left:3px solid var(--warn);border-radius:0 8px 8px 0;
+      padding:10px 12px;margin:12px 0;font-size:13px;color:#7a2f27}
+.tip{background:#f7f6ef;border-left:3px solid var(--accent);border-radius:0 8px 8px 0;
+     padding:10px 12px;margin:12px 0;font-size:13px;color:var(--muted)}
+.placeholder{background:var(--card);border:1px dashed var(--line);border-radius:12px;
+             padding:26px 18px;text-align:center;color:var(--muted)}
+.placeholder b{display:block;color:var(--ink);font-size:15px;margin-bottom:6px}
+@media (max-width:640px){
+  .lbl{flex-basis:26px;font-size:11px}
+  th,td{white-space:normal}
+  .hex{font-size:11.5px}
+}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="hd">
+    <h1>J51NG 协议与流程 <small>M v1.83 / S v1.16 · 2026-11-21</small></h1>
+    <div class="tabs">
+      <button class="on" data-t="ota">OTA 升级</button>
+      <button data-t="report">状态与距离上报</button>
+      <button data-t="rod">自定义杆</button>
+    </div>
+  </div>
+</header>
+
+<main>
+
+<!-- ==================== OTA ==================== -->
+<section id="ota">
+
+  <div class="lead">
+    <b>干什么：</b>把主控 M 或蓝牙板 S 的 <b>APP 区</b>换掉。<b>boot 区不通过 OTA 更新</b>，只能 SWD 烧录。<br>
+    <b>顺序：</b>先升主控 M（重启验证）→ 再升蓝牙板 S（它会断连）。<b>顺序不能反，也不能同时升。</b>
+  </div>
+
+  <h2>一、流程图</h2>
+
+  <div class="flow">
+    <div class="fnode go">
+      <span class="fn-h">0</span><span class="fn-t">进 Boot</span>
+      <div class="fn-d">App 模式下发一帧，设备复位进 boot</div>
+    </div>
+    <div class="farrow"><span>BLE 断开</span></div>
+    <div class="fnode wait">
+      <span class="fn-h">1</span><span class="fn-t">重新扫描连接</span>
+      <div class="fn-d">等 1~2 s，广播名不变，重新订阅通知</div>
+    </div>
+    <div class="farrow"><span>已连接</span></div>
+    <div class="fnode">
+      <span class="fn-h">2</span><span class="fn-t">握手 0x0101 → 0x0102</span>
+      <div class="fn-d">拿硬件码、固件版本、单包上限 maxpkt</div>
+    </div>
+    <div class="farrow"><span>status=00</span></div>
+    <div class="fnode">
+      <span class="fn-h">3</span><span class="fn-t">参数 0x0201 → 0x0202</span>
+      <div class="fn-d">报固件大小、SHA256、单包长度</div>
+    </div>
+    <div class="farrow"><span>status=00</span></div>
+    <div class="fnode">
+      <span class="fn-h">4</span><span class="fn-t">数据 0x0301 → 0x0302 / 0x0303</span>
+      <div class="fn-d">循环发，每包等 ACK；收到 NACK 从该 seq 重发</div>
+    </div>
+    <div class="farrow"><span>全部 ACK</span></div>
+    <div class="fnode">
+      <span class="fn-h">5</span><span class="fn-t">校验 0x0401 → 0x0402</span>
+      <div class="fn-d">比对设备实算的 32 字节摘要</div>
+    </div>
+    <div class="farrow"><span>一致</span></div>
+    <div class="fnode">
+      <span class="fn-h">6</span><span class="fn-t">完成 0x0501 → 0x0502</span>
+      <div class="fn-d">设备写标志位后重启，status=00 表示成功</div>
+    </div>
+    <div class="farrow"><span>设备重启</span></div>
+    <div class="fnode go">
+      <span class="fn-h">7</span><span class="fn-t">重连验证</span>
+      <div class="fn-d">查 0x20 的版本与 CRC，与目标固件比对</div>
+    </div>
+    <div class="fbranch">
+      任一环节 status≠00 或超时 → 停下报错，设备停在 boot 可重来；
+      <b>不要</b>跳过校验直接发完成。
+    </div>
+  </div>
+
+  <h2>二、逐步协议（按"发什么"讲）</h2>
+
+  <div class="step">
+    <div class="step-h"><span class="no">0</span>进 Boot <span class="tag">应用通道 53 A2</span></div>
+    <div class="step-b">
+      <div class="line"><span class="lbl tx">发</span><div class="hex txb">53 A2 04 00 FF 01 F9 01</div></div>
+      <div class="field">
+        <code>53 A2</code> 帧头 · <code>04 00</code> len=4 · <code>FF</code> cmd=进 Boot ·
+        <code>01</code> 参数 · <code>F9 01</code> 校验和 0x01F9
+      </div>
+      <div class="note">
+        设备收到后 <b>复位进 boot</b>，BLE 立刻断开，这一帧<b>没有业务应答</b>。
+        等 1~2 s 后重新扫描，广播名仍是 <b>AIMTECH VHR</b>，重新订阅通知再继续。
+      </div>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-h"><span class="no">2</span>握手 0x0101 <span class="tag">升级通道 EB 90</span></div>
+    <div class="step-b">
+      <div class="line"><span class="lbl tx">发</span><div class="hex txb">EB 90 01 01 00 10 4A 35 31 56 41 2D 53 FF FF FF FF FF FF FF FF FF 62</div></div>
+      <div class="line"><span class="lbl rx">期</span><div class="hex rxb">EB 90 01 02 00 15 00 4A 35 31 56 41 2D 53 FF FF FF FF FF FF FF FF FF 01 10 00 E4 1C</div></div>
+      <div class="field">
+        <code>EB 90</code> 帧头 · <code>01 01</code> type=握手请求 · <code>00 10</code> len=16 ·
+        payload = 16 字节硬件码 · <code>62</code> CRC8
+      </div>
+      <div class="field">
+        应答拆解：<code>01 02</code> type · <code>00 15</code> len=21 ·
+        <code>00</code> status · 16B 硬件码 · <code>01 10</code> 版本 v1.16 ·
+        <code>00 E4</code> maxpkt=228 · <code>1C</code> CRC8
+      </div>
+      <div class="note">
+        <b>硬件码决定发给谁</b>：主控用 <code>J51VA-M</code>，蓝牙板用 <code>J51VA-S</code>，不足 16 字节补 <code>FF</code>。
+        超时 <b>3 s</b>，重试 2 次。拿到的 <b>maxpkt</b> 就是后面单包上限（这里是 228）。
+      </div>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-h"><span class="no">3</span>参数 0x0201 <span class="tag">升级通道 EB 90</span></div>
+    <div class="step-b">
+      <div class="line"><span class="lbl tx">发</span><div class="hex txb">EB 90 02 01 00 26 00 00 B1 BC AA AA AA AA AA AA AA AA AA AA AA AA AA AA AA AA AA AA AA AA AA AA AA AA AA AA AA AA AA AA AA AA 00 80 CD</div></div>
+      <div class="line"><span class="lbl rx">期</span><div class="hex rxb">EB 90 02 02 00 01 00 FD</div></div>
+      <div class="field">
+        payload 共 38 字节：<code>size(4,BE)</code> + <code>SHA256(32)</code> + <code>pkt(2,BE)</code><br>
+        上面示例：size=<code>0x0000B1BC</code>（45500 B，S 板）、SHA 用占位 <code>AA</code>、pkt=<code>0x0080</code>（128 B）
+      </div>
+      <div class="note">
+        <b>size 必须是固件真实字节数</b>，写错后面 SHA 一定不过。超时 <b>3 s</b>，重试 2 次。
+        <code>pkt</code> 建议 128，不能超过握手拿到的 maxpkt。
+      </div>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-h"><span class="no">4</span>数据 0x0301 <span class="tag">循环 · 每包等 ACK</span></div>
+    <div class="step-b">
+      <div class="line"><span class="lbl tx">发</span><div class="hex txb">EB 90 03 01 00 86 00 00 00 03 00 80 &lt;128 字节数据&gt; 67</div></div>
+      <div class="line"><span class="lbl rx">期</span><div class="hex rxb">EB 90 03 02 00 03 00 00 00 0E</div></div>
+      <div class="line"><span class="lbl rx">或</span><div class="hex rxb">EB 90 03 03 00 03 21 00 01 08</div></div>
+      <div class="field">
+        请求 payload：<code>seq(2)</code> + <code>total(2)</code> + <code>len(2)</code> + <code>data(len)</code><br>
+        示例：seq=<code>0x0000</code>、total=<code>0x0003</code>、len=<code>0x0080</code>（128 B）
+      </div>
+      <div class="field">
+        ACK <code>03 02</code>：status + seq → 收到就发下一包<br>
+        NACK <code>03 03</code>：status + seq → <b>从该 seq 重发</b>（示例 status=<code>0x21</code> 序号错，从 seq=1 重来）
+      </div>
+      <div class="note">
+        窗口 <b>8 包</b>、包间隔 <b>4 ms</b>、单包 128 B。超时 <b>2 s</b>，重试 3 次。
+        实测：S 板 360 包约 4 s，M 主控 755 包约 12 s。
+      </div>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-h"><span class="no">5</span>校验 0x0401 <span class="tag">升级通道 EB 90</span></div>
+    <div class="step-b">
+      <div class="line"><span class="lbl tx">发</span><div class="hex txb">EB 90 04 01 00 20 &lt;32 字节 SHA256&gt; &lt;CRC8&gt;</div></div>
+      <div class="line"><span class="lbl rx">期</span><div class="hex rxb">EB 90 04 02 00 21 00 &lt;32 字节实算摘要&gt; &lt;CRC8&gt;</div></div>
+      <div class="field">
+        应答 payload：<code>status(1)</code> + <code>sha256(32)</code>
+      </div>
+      <div class="note">
+        把设备回的 32 字节和你本地算的 <b>逐字节比对</b>。不一致说明写入出错，
+        status 通常是 <code>0x11</code>，此时<b>不能发完成</b>，要重新升级。
+      </div>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-h"><span class="no">6</span>完成 0x0501 <span class="tag">升级通道 EB 90</span></div>
+    <div class="step-b">
+      <div class="line"><span class="lbl tx">发</span><div class="hex txb">EB 90 05 01 00 00 25</div></div>
+      <div class="line"><span class="lbl rx">期</span><div class="hex rxb">EB 90 05 02 00 01 00 D4</div></div>
+      <div class="field">
+        应答 payload 只有 1 字节 status：<code>00</code> 成功 · <code>FF</code> 应用失败
+      </div>
+      <div class="note">
+        设备在 APPLYING 期间<b>不消费</b>这一帧，所以没回应是正常的：<b>每 500 ms 重发，最多 20 次</b>。
+        收到 <code>status=00</code> 后设备重启，BLE 断开。
+      </div>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-h"><span class="no">7</span>重连验证 <span class="tag">应用通道 53 A2</span></div>
+    <div class="step-b">
+      <div class="line"><span class="lbl tx">发</span><div class="hex txb">53 A2 04 00 20 02 1B 01</div></div>
+      <div class="line"><span class="lbl rx">期</span><div class="hex rxb">54 A1 0F 00 21 02 01 01 83 BD 42 27 DB 54 79 01 00 7B 04</div></div>
+      <div class="field">
+        <code>id=02</code>（主控）· <code>stage=01</code>（跑在 APP）· fw=<code>1.83</code> ·
+        crc32=<code>0xDB2742BD</code> · size=<code>96596</code>
+      </div>
+      <div class="note">
+        <b>版本和 CRC 都对上才算升级成功</b>。<code>stage=0</code> 说明设备还停在 boot，没跳回 APP。
+        查蓝牙板把 id 换成 <code>01</code>，帧为 <code>53 A2 04 00 20 01 1A 01</code>。
+      </div>
+    </div>
+  </div>
+
+  <h2>三、状态码</h2>
+
+  <table>
+    <thead><tr><th>码</th><th>含义</th><th>App 该做什么</th></tr></thead>
+    <tbody>
+      <tr><td><code>0x00</code></td><td>成功</td><td>继续下一步</td></tr>
+      <tr><td><code>0x11</code></td><td>SHA 不匹配</td><td>停止，重新升级；检查 size 和固件文件</td></tr>
+      <tr><td><code>0x21</code></td><td>序号错</td><td>按 NACK 返回的 seq 重发</td></tr>
+      <tr><td><code>0x22</code></td><td>长度错</td><td>检查 pkt 是否超过 maxpkt</td></tr>
+      <tr><td><code>0x23</code></td><td>Flash 擦写失败</td><td>重试一次，仍失败换板</td></tr>
+      <tr><td><code>0xFF</code></td><td>应用超时</td><td>重新进 boot 再升</td></tr>
+    </tbody>
+  </table>
+
+  <h2>四、常见失败</h2>
+
+  <div class="warn">
+    <b>卡在握手</b>：设备其实还在 APP 模式没进 boot → 先发第 0 步那一帧，再重连。<br>
+    <b>校验老不过</b>：size 填错，或固件文件选错（M 的 bin 发给了 S）。<br>
+    <b>发完成没回应</b>：正常，APPLYING 期间不消费，继续每 500 ms 重发即可。<br>
+    <b>升完连不上</b>：设备正在重启广播，等 2 s 再扫。
+  </div>
+
+  <div class="tip">
+    <b>为什么 boot 不能 OTA：</b>boot 是负责"接收并写入 APP"的那段代码，它把自己覆盖掉就再也起不来了。
+    现场升级永远只碰 APP 区，boot 只能出厂前用 ST-Link 烧。
+  </div>
+
+</section>
+
+<!-- ==================== 状态与距离上报 ==================== -->
+<section id="report" hidden>
+  <div class="placeholder">
+    <b>结构占位</b>
+    这一页会按同样格式写：<br>
+    流程图（设备主动推哪些帧、什么顺序）→ 每条帧"发什么/收什么"→ 字段解与单位换算 → 链路保活。
+  </div>
+</section>
+
+<!-- ==================== 自定义杆 ==================== -->
+<section id="rod" hidden>
+  <div class="placeholder">
+    <b>结构占位</b>
+    这一页会按同样格式写：<br>
+    流程图（读状态 → 三片下发 → 提交 → 轮询 → 比对）→ 每条帧完整 hex →
+    68 字节表结构与 CRC 算法 → 每个应答码分支。
+  </div>
+</section>
+
+</main>
+
+<script>
+document.querySelectorAll('.tabs button').forEach(function (b) {
+  b.addEventListener('click', function () {
+    document.querySelectorAll('.tabs button').forEach(function (x) { x.classList.toggle('on', x === b); });
+    document.querySelectorAll('main > section').forEach(function (s) {
+      s.hidden = s.id !== b.dataset.t;
+    });
+    window.scrollTo(0, 0);
+  });
+});
+</script>
+</body>
+</html>
