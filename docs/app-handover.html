@@ -1,0 +1,221 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>J51NG · App 对接说明书</title>
+<style>
+:root{--bg:#f2f1e8;--card:#fff;--line:#ddd8c6;--ink:#2b2a25;--muted:#6f6a5c;--accent:#6b7f3a;--code:#f6f5ee}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.65 -apple-system,"PingFang SC","Microsoft YaHei",system-ui,sans-serif}
+.wrap{max-width:900px;margin:0 auto;padding:18px 16px 80px}
+h1{font-size:22px;margin:8px 0 14px} h2{font-size:18px;margin:26px 0 10px;padding-top:10px;border-top:1px solid var(--line)}
+h3{font-size:15.5px;margin:18px 0 8px} h4{font-size:14px;margin:14px 0 6px}
+p{margin:8px 0} ul,ol{margin:8px 0 8px 22px} li{margin:3px 0}
+code{background:var(--code);border:1px solid var(--line);border-radius:4px;padding:1px 4px;font-size:12.5px;font-family:ui-monospace,Consolas,monospace}
+pre{background:#1f2119;color:#e8e6dc;padding:12px 14px;border-radius:10px;overflow-x:auto;font-size:12.5px;line-height:1.5}
+pre code{background:none;border:0;color:inherit;padding:0}
+table{border-collapse:collapse;width:100%;margin:10px 0;background:var(--card);font-size:13px;display:block;overflow-x:auto}
+th,td{border:1px solid var(--line);padding:6px 9px;text-align:left;vertical-align:top;white-space:nowrap}
+@media (max-width:700px){ th,td{white-space:normal;word-break:break-word} table{display:table;width:100%} }
+th{background:var(--code);font-weight:600}
+blockquote{margin:10px 0;padding:9px 12px;border-left:3px solid var(--accent);background:#f7f6ef;color:var(--muted);border-radius:0 8px 8px 0}
+hr{border:0;border-top:1px solid var(--line);margin:22px 0}
+</style></head><body><div class="wrap"><h1>13 · App 对接说明书（协议 + 流程 + 操作）</h1>
+<blockquote>交付对象：App 开发<br>版本基线：主控 M v1.83（<code>0xDB2742BD</code>）· 蓝牙板 S v1.16（<code>0x9AA0FB65</code>）<br>固件日期：2026-11-21<br>本文所有字节序、超时、错误码均来自当前固件实测，不是推测。</blockquote>
+<hr>
+<h2>0. 先搞清楚谁是谁</h2>
+<table><thead><tr><th>角色</th><th>芯片</th><th>职责</th><th>App 能不能直接对话</th></tr></thead><tbody><tr><td><strong>M 主控</strong></td><td>GD32F303CB</td><td>测距、推荐杆算法、杆包表存储、电源管理。Modbus 从站 <code>0x01</code></td><td>❌ 不能。M 没有 BLE</td></tr><tr><td><strong>S 蓝牙板</strong></td><td>N32WB031</td><td>BLE 外设，App 的唯一入口；把 App 的请求转成 Modbus/UART 发给 M</td><td>✅ <strong>只有 S 有 BLE</strong></td></tr></tbody></table>
+<p><strong>App 只跟 S 说话。</strong> M 的一切能力（版本、杆包表、推荐杆）都要经 S 转发。</p>
+<p>两条互不相干的通道，用不同的帧头区分：</p>
+<table><thead><tr><th>通道</th><th>帧头</th><th>用途</th></tr></thead><tbody><tr><td><strong>应用通道</strong></td><td><code>53 A2</code>（下行）/ <code>54 A1</code>、<code>53 A2</code>（上行）</td><td>日常业务：版本、测距数据、杆包表</td></tr><tr><td><strong>升级通道</strong></td><td><code>EB 90</code></td><td>固件 OTA（进 boot 后走这条）</td></tr></tbody></table>
+<hr>
+<h2>1. BLE 连接</h2>
+<h3>1.1 广播与 UUID</h3>
+<table><thead><tr><th>项</th><th>值</th></tr></thead><tbody><tr><td>设备名</td><td><code>AIMTECH VHR</code></td></tr><tr><td>名字前缀（扫描过滤用）</td><td><code>AIMTECH</code>（备用 <code>J51NG</code>）</td></tr><tr><td>Service UUID</td><td><code>00002760-08c2-11e1-9073-0e8ac72e1001</code></td></tr><tr><td>Write Characteristic</td><td><code>00002760-08c2-11e1-9073-0e8ac72e0001</code></td></tr><tr><td>Notify Characteristic</td><td><code>00002760-08c2-11e1-9073-0e8ac72e0002</code></td></tr></tbody></table>
+<h3>1.2 连接步骤（照这个顺序做，别省）</h3>
+<pre><code>1) 扫描：按 namePrefix 过滤（不要扫全部再筛）
+2) connect
+3) getPrimaryService(SERVICE)
+4) getCharacteristic(WRITE) / (NOTIFY)
+5) ⚠️ 必须先 setCharacteristicNotification + 写 CCCD 使能通知
+6) 请求 MTU 247（Android: requestMtu(247)）
+7) 此时才能发第一条命令</code></pre>
+<p><strong>第 5 步是必须的</strong>：不订阅通知，S 的所有应答你都收不到，表现为&quot;发出去没反应&quot;（这坑我们踩过）。</p>
+<h3>1.3 写方式</h3>
+<table><thead><tr><th>阶段</th><th>支持</th></tr></thead><tbody><tr><td>APP 模式（日常）</td><td><strong>只支持 write-without-response</strong></td></tr><tr><td>Boot 模式（升级中）</td><td>write 与 write-without-response 都支持</td></tr></tbody></table>
+<blockquote>用 write-with-response 在 APP 模式下会超时失败。<strong>一律用 write-without-response。</strong></blockquote>
+<h3>1.4 权限（Android 12+）</h3>
+<ul><li><code>BLUETOOTH_SCAN</code> / <code>BLUETOOTH_CONNECT</code></li><li>6.0~11 还需要 <strong>定位权限</strong> 且 <strong>打开系统定位开关</strong>，否则扫不到任何设备</li><li>iOS：需要 <code>NSBluetoothAlwaysUsageDescription</code></li></ul>
+<hr>
+<h2>2. 应用通道帧格式</h2>
+<h3>2.1 下行（App → S）</h3>
+<pre><code>+------+------+--------+--------+------+-----------+--------+--------+
+| 0x53 | 0xA2 | len_lo | len_hi | cmd  | payload…  | sum_lo | sum_hi |
++------+------+--------+--------+------+-----------+--------+--------+
+                len = payload 字节数 + 3
+                sum = (0x53 + 0xA2 + len_lo + len_hi + cmd + payload 各字节) &amp; 0xFFFF</code></pre>
+<h3>2.2 上行（S → App）</h3>
+<p><strong>两种帧头都要收</strong>，格式与下行同构：</p>
+<table><thead><tr><th>帧头</th><th>含义</th></tr></thead><tbody><tr><td><code>54 A1</code></td><td>S 主动上报（测距结果、电量、状态）</td></tr><tr><td><code>53 A2</code></td><td>对 App 命令的应答（<code>0x0F</code>/<code>0x15</code>/<code>0x21</code>/<code>0x22</code> 等）</td></tr></tbody></table>
+<blockquote>⚠️ 很多现成的 BLE 解析只认一种帧头。<strong>两种都必须解析</strong>，否则&quot;命令有应答但收不到&quot;。</blockquote>
+<h3>2.3 参考实现（流式解析 + 组帧）</h3>
+<pre><code>// ---- 组帧 ----
+fun buildFrame(cmd: Byte, payload: ByteArray): ByteArray {
+    val len = payload.size + 3
+    val f = ByteArray(7 + payload.size)
+    f[0]=0x53; f[1]=0xA2.toByte()
+    f[2]=len and 0xFF; f[3]=(len shr 8) and 0xFF
+    f[4]=cmd
+    payload.copyInto(f, 5)
+    var sum = 0
+    for (i in 0 until 5 + payload.size) sum += f[i].toInt() and 0xFF
+    f[5+payload.size]= (sum and 0xFF)
+    f[6+payload.size]= ((sum shr 8) and 0xFF)
+    return f
+}
+
+// ---- 流式解析：通知可能拆包/并包，必须缓存再按 len 切 ----
+val buf = ArrayDeque&lt;Byte&gt;()
+
+fun onNotify(chunk: ByteArray) {
+    buf.addAll(chunk.toList())
+    while (buf.size &gt;= 4) {
+        val h0 = buf[0].toInt() and 0xFF
+        val h1 = buf[1].toInt() and 0xFF
+        if ((h0 != 0x53 &amp;&amp; h0 != 0x54) || h1 != 0xA1 &amp;&amp; h1 != 0xA2) {
+            buf.removeFirst(); continue          // 找帧头
+        }
+        val len = (buf[2].toInt() and 0xFF) or ((buf[3].toInt() and 0xFF) shl 8)
+        if (len &lt; 3 || len &gt; 512) { buf.removeFirst(); continue }
+        val total = 4 + len
+        if (buf.size &lt; total) return             // 半帧，等下一包
+        val f = buf.toList().subList(0, total)
+        var sum = 0
+        for (i in 0 until total - 2) sum += f[i].toInt() and 0xFF
+        val got = (f[total-2].toInt() and 0xFF) or ((f[total-1].toInt() and 0xFF) shl 8)
+        buf.subList(0, total).clear()
+        if (sum != got) continue                 // 校验错，丢掉
+        val cmd = f[4].toInt() and 0xFF
+        val payload = f.subList(5, total - 2).toByteArray()
+        dispatch(cmd, payload)
+    }
+}</code></pre>
+<h3>2.4 分包与 MTU</h3>
+<ul><li>MTU 协商到 247 → 单帧有效载荷上限 <strong>244 B</strong>，建议单帧 ≤ <strong>228 B</strong></li><li>大于这个长度自己拆（本项目现有命令最大 68+4 B，不会超）</li><li>通知可能<strong>被拆成多包到达</strong>，解析器必须做<strong>流式拼包</strong>（按 len 字段）</li></ul>
+<hr>
+<h2>3. 命令速查表</h2>
+<h3>3.1 下行命令</h3>
+<table><thead><tr><th>cmd</th><th>名称</th><th>payload</th><th>应答</th></tr></thead><tbody><tr><td><code>0x03</code></td><td>雷达休眠/唤醒（预留，当前无实际动作）</td><td><code>01</code> 唤醒 / <code>02</code> 休眠</td><td>无</td></tr><tr><td><code>0x04</code></td><td>设置当前杆号</td><td><code>club(1) num(1)</code></td><td>无</td></tr><tr><td><code>0x0A</code></td><td>查构建号</td><td>空</td><td><code>0x13</code>（4 B 日期码）</td></tr><tr><td><code>0x0D</code></td><td>杆包表分片写入</td><td><code>off_lo off_hi n data[n]</code>（n ≤ 28）</td><td><code>0x15</code>，ack=<code>0x01</code></td></tr><tr><td><code>0x0E</code></td><td>杆包表命令</td><td><code>01</code> 提交 / <code>02</code> 恢复默认 / <code>03</code> 擦除 / <code>04</code> 查状态</td><td>需再发 <code>0x0F</code> 取结果</td></tr><tr><td><code>0x0F</code></td><td>取杆包表结果</td><td>空</td><td><code>0x15</code>（6 B）</td></tr><tr><td><code>0x20</code></td><td>查板卡描述</td><td><code>id</code>：<code>1</code>=S蓝牙板 <code>2</code>=M主控</td><td><code>0x21</code>（12 B）</td></tr><tr><td><code>0x21</code></td><td>查板卡型号</td><td><code>id</code> 同上</td><td><code>0x22</code>（13 B）</td></tr></tbody></table>
+<h3>3.2 主动上报（<code>54 A1</code>）</h3>
+<table><thead><tr><th>cmd</th><th>内容</th><th>长度</th><th>说明</th></tr></thead><tbody><tr><td><code>0x03</code></td><td>球速</td><td>8 B</td><td>原生字节，暂未定标</td></tr><tr><td><code>0x06</code></td><td>电量</td><td>1 B</td><td><code>0</code>~<code>4</code> 格</td></tr><tr><td><code>0x07</code></td><td>距离 / 两点距</td><td>2 B <strong>小端</strong></td><td>单位 <strong>分米（dm）</strong>，<code>/10</code> 得米</td></tr><tr><td><code>0x08</code></td><td>坡度</td><td>2 B 小端</td><td>dm</td></tr><tr><td><code>0x09</code></td><td>垂直高差</td><td>2 B 小端</td><td>dm</td></tr><tr><td><code>0x0A</code></td><td>推荐杆</td><td>2 B 小端</td><td>杆号，见 3.4</td></tr><tr><td><code>0x0B</code></td><td>雷达开关状态</td><td>1 B</td><td></td></tr><tr><td><code>0x0C</code></td><td>测量模式</td><td>1 B</td><td><code>0</code>=单点 <code>1</code>=两点</td></tr><tr><td><code>0x13</code></td><td>版本</td><td>4 B</td><td>见 3.3</td></tr></tbody></table>
+<h3>3.3 版本帧 <code>0x13</code> / 板卡描述 <code>0x21</code> / 型号 <code>0x22</code></h3>
+<pre><code>0x13 (4B):  uint32 小端「构建号」，形如 2026081401（YYYYMMDDnn）
+0x21 (12B): id(1) stage(1) fw_major(1) fw_minor(1) crc32(4,LE) size(4,LE)
+            stage: 0 = 运行在 APP，1 = 运行在 BOOT
+0x22 (13B): id(1) model(12, ASCII，如 &quot;N2SE_S&quot;)</code></pre>
+<blockquote>⚠️ <strong><code>0x13</code> 是构建日期码，不是固件版本</strong>。界面上要显示的 <code>v1.16</code> 这种版本号，<br>必须从 <code>0x20</code> → <code>0x21</code> 的 <code>fw_major/fw_minor</code> 取。<br><code>0x20</code>/<code>0x21</code> 也是判断&quot;设备当前在跑 APP 还是 BOOT&quot;的唯一方式，<strong>升级前后都应各查一次</strong>做对比。</blockquote>
+<h3>3.4 杆号编码（推荐杆 <code>0x0A</code> 与设置杆号 <code>0x04</code> 共用）</h3>
+<table><thead><tr><th>值</th><th>杆</th><th>值</th><th>杆</th><th>值</th><th>杆</th></tr></thead><tbody><tr><td><code>0x00</code></td><td>W1</td><td><code>0x06</code></td><td>H5</td><td><code>0x0C</code></td><td>I7</td></tr><tr><td><code>0x01</code></td><td>W3</td><td><code>0x07</code></td><td>H6</td><td><code>0x0D</code></td><td>I8</td></tr><tr><td><code>0x02</code></td><td>W5</td><td><code>0x08</code></td><td>I3</td><td><code>0x0E</code></td><td>I9</td></tr><tr><td><code>0x03</code></td><td>W7</td><td><code>0x09</code></td><td>I4</td><td><code>0x0F</code></td><td>PW</td></tr><tr><td><code>0x04</code></td><td>H3</td><td><code>0x0A</code></td><td>I5</td><td><code>0x10</code></td><td>GW</td></tr><tr><td><code>0x05</code></td><td>H4</td><td><code>0x0B</code></td><td>I6</td><td><code>0x11</code></td><td>SW</td></tr><tr><td><code>0x12</code></td><td>LW</td><td><code>0x13</code></td><td>AW</td><td><code>0x14</code></td><td>Pt</td></tr><tr><td><code>0xEF</code></td><td>无推荐</td><td></td><td></td><td></td><td></td></tr></tbody></table>
+<hr>
+<h2>4. 流程 A：连接后读设备信息</h2>
+<pre><code>连接成功
+  → 0x0A                → 收 0x13：S 的构建号（日期码，不是 vX.YY）
+  → 0x20 [0x01]         → 收 0x21：S 的描述（含 crc32 / size / stage）
+  → 0x20 [0x02]         → 收 0x21：M 的描述
+  → 0x21 [0x01] / [0x02]→ 收 0x22：型号字符串</code></pre>
+<p>界面显示建议：<code>S v1.16 / M v1.83</code>、<code>当前模式 APP/BOOT</code>、<code>CRC</code>。</p>
+<blockquote>若 <code>0x20 [0x02]</code> 一直拿不到 → 说明 S 还没和 M 握上手（M 未上电或串口没通），此时应提示&quot;主控未就绪&quot;，而不是&quot;设备异常&quot;。</blockquote>
+<hr>
+<h2>5. 流程 B：测距数据订阅</h2>
+<p>订阅通知后，S 会不定时推 <code>54 A1</code>。App 只需要被动接收 + 解析，不用轮询。</p>
+<pre><code>0x07 距离      → 主显（÷10，单位米）
+0x0C 模式      → 决定 0x07 是&quot;单点距离&quot;还是&quot;两点距&quot;
+0x0A 推荐杆    → 推荐杆图标/文字
+0x06 电量      → 电量格</code></pre>
+<hr>
+<h2>6. 流程 C：自定义杆包（第 5 档 Pro）</h2>
+<h3>6.1 表结构（68 字节）</h3>
+<pre><code>偏移  长度  内容
+0x00   1    &#x27;G&#x27; (0x47)
+0x01   1    &#x27;R&#x27; (0x52)
+0x02   1    版本 = 1
+0x03   1    杆数 = 13
+0x04   1    容差 = 5
+0x05   1    保留 0
+0x06   2    CRC16（小端，见下）
+0x08   8    保留，填 0xFF
+0x10  52    13 根 × { mean(int16 LE), sigma(uint16 LE) }</code></pre>
+<ul><li>单位是<strong>码 ×2</strong>（定长整数）：<code>mean = (最近 + 最远)</code>，<code>sigma = (最远 - 最近) / 2</code></li><li>整表先填 <code>0xFF</code>，再写上述字段</li><li><strong>CRC16-CCITT</strong>：init <code>0xFFFF</code>，poly <code>0x1021</code>，对<strong>整 68 字节</strong>计算，计算前把 <code>[6][7]</code> 置 0，结果回填到 <code>[6][7]</code>（小端）</li></ul>
+<blockquote>主控会用同样的算法重算并和管理值比对，<strong>不一致直接拒收</strong>。所以 CRC 必须由 App 正确填写。</blockquote>
+<h3>6.2 下发时序（必须按这个顺序）</h3>
+<pre><code>① 0x0D  off=0x0000 n=28  + 表[0..27]      → 等 0x15 ack=0x01（回显 off/n）
+② 0x0D  off=0x001C n=28  + 表[28..55]     → 等 0x15 ack=0x01
+③ 0x0D  off=0x0038 n=12  + 表[56..67]     → 等 0x15 ack=0x01
+④ 0x0E  [0x01]                             （提交）
+⑤ 0x0F 轮询 → 0x15 ack=0x02（提交完成）</code></pre>
+<ul><li>每帧之间<strong>间隔 400~500 ms</strong>（S 要转成 Modbus 写给 M）</li><li>④ 之后<strong>不要立刻发 ⑤</strong>，建议 200 ms 后再开始轮询，轮询间隔 200 ms，总超时 <strong>8 s</strong></li><li>提交成功后，<strong>主控会自动切到第 5 档「自定义 Pro」</strong>，App 不需要再发切档命令</li></ul>
+<h3>6.3 读当前状态</h3>
+<pre><code>0x0E [0x04]  → 200 ms 后 0x0F 轮询 → 0x15 ack=0x04</code></pre>
+<p>界面拿 <code>本地 CRC</code> 和 <code>主控 CRC</code> 比对：</p>
+<table><thead><tr><th>情况</th><th>显示</th></tr></thead><tbody><tr><td><code>valid=0</code></td><td>主控：无自定义表 → 需要下发</td></tr><tr><td><code>crc</code> 相等</td><td>✅ 已是最新</td></tr><tr><td><code>crc</code> 不等</td><td>⚠️ 需要更新</td></tr></tbody></table>
+<h3>6.4 擦除</h3>
+<pre><code>0x0E [0x03] → 0x0F 轮询 → 0x15 ack=0x03</code></pre>
+<p>擦除后主控自动从第 5 档退回第 1 档。</p>
+<h3>6.5 <code>0x15</code> 应答格式（6 字节）</h3>
+<pre><code>ack(1) valid(1) ver(1) count(1) crc_lo(1) crc_hi(1)</code></pre>
+<table><thead><tr><th>ack</th><th>含义</th><th>App 处理</th></tr></thead><tbody><tr><td><code>0x01</code></td><td>分片已收到</td><td>继续发下一片</td></tr><tr><td><code>0x81</code></td><td>命令已受理，处理中</td><td><strong>不算结束</strong>，继续轮询</td></tr><tr><td><code>0x02</code></td><td>提交完成</td><td>读 valid/count/crc 判结果</td></tr><tr><td><code>0x03</code></td><td>擦除完成</td><td></td></tr><tr><td><code>0x04</code></td><td>状态查询结果</td><td></td></tr><tr><td><code>0x91</code></td><td>主控链路未就绪（S 刚上电/升级中）</td><td>提示&quot;稍后重试&quot;</td></tr><tr><td><code>0x92</code> <code>0x93</code> <code>0x94</code></td><td>第 1/2/3 片下发被拒（串口没发出去）</td><td>重发该片</td></tr><tr><td><code>0xE1</code></td><td>主控 600 ms 内没应答</td><td>可再点一次（内部已重试一次）</td></tr><tr><td><code>0xE2</code></td><td>S 侧串口这一帧没发出去</td><td>重试</td></tr><tr><td><code>0x82</code>~<code>0x8F</code></td><td>主控 Modbus 异常（<code>0x80</code> \</td><td>异常码）</td><td>显示错误码</td></tr></tbody></table>
+<hr>
+<h2>7. 流程 D：OTA 升级</h2>
+<h3>7.1 什么时候用</h3>
+<ul><li>升级<strong>主控 M</strong>：只更新 M 的 APP 区</li><li>升级<strong>蓝牙板 S</strong>：只更新 S 的 APP 区</li><li>⚠️ <strong>boot 区不通过 OTA 更新</strong>，必须 SWD 烧录（现场升级碰不到）</li></ul>
+<h3>7.2 进入 Boot</h3>
+<p>APP 模式下发一帧即可（S 会自动转给 M / 自己进 boot）：</p>
+<pre><code>53 A2 04 00 FF 01 F9 01</code></pre>
+<p>随后设备复位进 boot，<strong>BLE 会断开</strong>，等 1~2 s 重新扫描连接（boot 广播名不变）。</p>
+<h3>7.3 升级帧（<code>EB 90</code>）</h3>
+<pre><code>EB 90 | type(2, BE) | len(2, BE) | payload | CRC8
+CRC8 = CRC-8/MAXIM（poly 0x07, init 0），校验范围 = type + len + payload</code></pre>
+<table><thead><tr><th>type</th><th>方向</th><th>名称</th><th>payload</th></tr></thead><tbody><tr><td><code>0x0000</code></td><td>S→App</td><td>心跳</td><td>空</td></tr><tr><td><code>0x0101</code></td><td>App→S</td><td>握手</td><td>16 B 硬件码 + 补 0xFF</td></tr><tr><td><code>0x0102</code></td><td>S→App</td><td>握手应答</td><td>status + hw(16) + version(4) + maxpkt(2,BE @21)</td></tr><tr><td><code>0x0201</code></td><td>App→S</td><td>参数</td><td>size(4,BE) + SHA256(32) + pkt(2,BE) = 38 B</td></tr><tr><td><code>0x0202</code></td><td>S→App</td><td>参数应答</td><td>status(1)</td></tr><tr><td><code>0x0301</code></td><td>App→S</td><td>数据</td><td>seq(2) + total(2) + len(2) + data</td></tr><tr><td><code>0x0302</code></td><td>S→App</td><td>ACK</td><td>status + seq(2)</td></tr><tr><td><code>0x0303</code></td><td>S→App</td><td>NACK</td><td>status + seq(2)（从该 seq 重发）</td></tr><tr><td><code>0x0401</code></td><td>App→S</td><td>校验</td><td>32 B SHA</td></tr><tr><td><code>0x0402</code></td><td>S→App</td><td>校验应答</td><td>status + 32 B 实算摘要</td></tr><tr><td><code>0x0501</code></td><td>App→S</td><td>完成</td><td>空（APPLYING 期间要重发）</td></tr><tr><td><code>0x0502</code></td><td>S→App</td><td>完成应答</td><td>status：<code>0x00</code> 成功 / <code>0xFF</code> 失败</td></tr></tbody></table>
+<p><strong>Status 码</strong>：<code>0x00</code> OK / <code>0x11</code> SHA 失败 / <code>0x21</code> 序号错 / <code>0x22</code> 长度错 / <code>0x23</code> Flash 错 / <code>0xFF</code> 应用超时</p>
+<h3>7.4 完整时序</h3>
+<pre><code>进 Boot（AB 帧）→ 重连
+  → 0x0101 握手（等 0x0102，超时 3 s）
+  → 0x0201 参数（size + SHA256 + pkt；等 0x0202，超时 3 s）
+  → 0x0301 循环发数据，每包等 0x0302；收到 0x0303 从该 seq 重发
+  → 0x0401 校验（等 0x0402，比对 32 字节）
+  → 0x0501 完成（等 0x0502；没回应就每 500 ms 重发，最多 20 次）
+  → 设备重启进 APP → 断开 → 重连 → 用 0x20 查版本确认</code></pre>
+<h3>7.5 分包建议（实测参数）</h3>
+<table><thead><tr><th>参数</th><th>值</th></tr></thead><tbody><tr><td>单包数据</td><td><strong>128 B</strong></td></tr><tr><td>窗口</td><td>8 包</td></tr><tr><td>包间隔</td><td>4 ms</td></tr><tr><td>MTU</td><td>247</td></tr></tbody></table>
+<p>实测：S 板 360 包 ≈ 4 s，M 主控 755 包 ≈ 12 s。</p>
+<h3>7.6 一键升级顺序（重要）</h3>
+<pre><code>1) 升主控 M  → 完成后重连、确认版本
+2) 升蓝牙板 S → 它是最后一步：S 一升级，BLE 立刻断，必须重新扫描连接</code></pre>
+<p><strong>顺序不能反</strong>，也不能同时升。</p>
+<hr>
+<h2>8. 超时与重试（照抄即可）</h2>
+<table><thead><tr><th>动作</th><th>超时</th><th>重试</th></tr></thead><tbody><tr><td>扫描连接</td><td>8 s</td><td>3 次，每次重新扫描</td></tr><tr><td><code>0x0D</code> 分片</td><td>1 s</td><td>重发该片 2 次</td></tr><tr><td><code>0x0E</code> 提交 + 轮询</td><td>8 s</td><td>1 次</td></tr><tr><td><code>0x0E</code> 读状态 + 轮询</td><td>4 s</td><td>1 次</td></tr><tr><td>升级握手/参数</td><td>3 s</td><td>2 次</td></tr><tr><td>升级数据包</td><td>2 s</td><td>3 次（按 NACK seq 重发）</td></tr><tr><td>升级完成</td><td>10 s</td><td>20 次 × 500 ms</td></tr></tbody></table>
+<p><code>0x0F</code> 轮询间隔 <strong>200 ms</strong>（别更密，S 内部一次完整读要 0.3~1.3 s）。</p>
+<hr>
+<h2>9. 已知限制（App 必须处理）</h2>
+<table><thead><tr><th>限制</th><th>表现</th><th>App 要做的事</th></tr></thead><tbody><tr><td><strong>同一时刻只有一条 BLE 链路</strong></td><td>别人连着时你扫不到设备</td><td>提示&quot;设备已被其他设备连接&quot;</td></tr><tr><td><strong>连接期间设备停止广播</strong></td><td>第二次扫描扫不到</td><td>连接前先断开旧链路</td></tr><tr><td><strong>5 分钟无按键 → 关蓝牙 → 8 s → 关机</strong></td><td>放着不动就断线，且再也连不上</td><td>断线提示&quot;设备已休眠，请按键唤醒&quot;</td></tr><tr><td><strong>升级与杆包下发互斥</strong></td><td>同时做会把表写坏（主控已加 CRC 校验会拒收）</td><td>UI 上互斥：升级中禁用杆包按钮</td></tr><tr><td><strong>S 升级后立刻断连</strong></td><td>升完必须重新扫描</td><td>升级完成后自动重连</td></tr><tr><td><strong><code>0xE1</code> 主控无应答</strong></td><td>偶发，多发在刚上电/刚写完 flash</td><td>自动重试一次，仍失败再报错</td></tr><tr><td><strong>iOS 无 Web Bluetooth</strong></td><td>网页版在 iOS 用不了</td><td>App 用原生 BLE，不受影响</td></tr></tbody></table>
+<hr>
+<h2>10. App 操作说明（界面与文案）</h2>
+<h3>10.1 首页 / 连接</h3>
+<table><thead><tr><th>元素</th><th>行为</th></tr></thead><tbody><tr><td>连接按钮</td><td>扫描 <code>AIMTECH*</code> → 连接 → 订阅 → 显示&quot;已连接&quot;</td></tr><tr><td>状态行</td><td><code>设备名 · 模式(APP/BOOT) · 版本 · CRC</code></td></tr><tr><td>断开按钮</td><td>主动断开，释放链路（<strong>不释放会导致设备不再广播</strong>）</td></tr></tbody></table>
+<p><strong>失败文案对照</strong></p>
+<table><thead><tr><th>情况</th><th>文案</th></tr></thead><tbody><tr><td>扫不到</td><td>未发现设备：请确认设备已开机、未被其他手机连接</td></tr><tr><td>连上但无应答</td><td>设备未就绪：请稍后重试</td></tr><tr><td><code>0x91</code></td><td>主控未就绪：请等设备启动完成</td></tr><tr><td><code>0xE1</code></td><td>主控无应答：请重试</td></tr></tbody></table>
+<h3>10.2 杆包页（自定义 Pro）</h3>
+<table><thead><tr><th>元素</th><th>行为</th></tr></thead><tbody><tr><td>13 行输入</td><td>每行「最近 ~ 最远」，单位码；右侧实时算 <code>均值 ± σ</code></td></tr><tr><td>读取主控状态</td><td><code>0x0E[04]</code> + 轮询 → 显示 <code>主控：v1 13 杆 crc=0xXXXX</code></td></tr><tr><td>下发到主控</td><td>6.2 那五步</td></tr><tr><td>载入默认</td><td>本地填默认表，不动设备</td></tr><tr><td>擦除</td><td><code>0x0E[03]</code></td></tr></tbody></table>
+<p>状态栏固定三段：<code>本地 crc=0xXXXX　主控：…　→ 结论</code></p>
+<p><strong>给用户的提示</strong>：这张表对应设备设置页的<strong>第 5 档「自定义 Pro」</strong>。下发成功后主控会<strong>自动切到第 5 档</strong>，不需要再去设备上手动切。</p>
+<h3>10.3 升级页</h3>
+<table><thead><tr><th>元素</th><th>行为</th></tr></thead><tbody><tr><td>扫描设备</td><td>读 S/M 版本与 CRC（<code>0x20</code>）</td></tr><tr><td>选择固件</td><td>本地 <code>.bin</code>，显示版本/大小/CRC</td></tr><tr><td>开始升级</td><td>7.4 流程，显示进度条与包计数</td></tr><tr><td>中止</td><td>发 <code>0x0501</code> 失败即放弃，设备留在 boot，下次可重试</td></tr></tbody></table>
+<hr>
+<h2>11. 自测清单（逐条打勾）</h2>
+<ul><li>☐ 扫描能发现 <code>AIMTECH VHR</code>，连接 &lt; 2 s</li><li>☐ 不订阅通知时命令无应答（确认订阅是必须的）</li><li>☐ <code>0x0A</code> 能读回 4 字节版本，与设备屏幕一致</li><li>☐ <code>0x20[1]</code> / <code>0x20[2]</code> 都能返回 12 字节，<code>stage</code> 正确</li><li>☐ 测距一枪，能收到 <code>0x07</code> 距离、<code>0x0A</code> 推荐杆</li><li>☐ 杆包读状态返回 <code>valid=1 count=13 crc=…</code></li><li>☐ 杆包下发后 <code>本地 crc == 主控 crc</code>，且设备自动切第 5 档</li><li>☐ 故意改坏一个字节再下发 → 主控<strong>拒收</strong>，CRC 不变（防写坏机制）</li><li>☐ 升级主控：755 包左右，12 s 内完成，重启后版本变更</li><li>☐ 升级蓝牙板：360 包左右，完成自动重连，版本变更</li><li>☐ 升级中禁用杆包按钮（互斥）</li><li>☐ 断开连接后重新扫描能再次发现设备</li></ul>
+<hr>
+<h2>12. FAQ / 排错</h2>
+<table><thead><tr><th>现象</th><th>原因</th><th>处理</th></tr></thead><tbody><tr><td>命令发出去无任何回帧</td><td>没订阅通知 / 写方式用了 write-with-response</td><td>见 1.2 / 1.3</td></tr><tr><td>只能收到部分回帧</td><td>解析器只认 <code>54A1</code>，没认 <code>53A2</code></td><td>两种帧头都要解析</td></tr><tr><td>长帧解析乱码</td><td>没做流式拼包</td><td>按 len 累计再解析</td></tr><tr><td>扫描偶发扫不到</td><td>设备已被连接 / 已自动关机</td><td>先断开、按键唤醒</td></tr><tr><td>杆包提交老 <code>0xE1</code></td><td>主控忙或总线撞车</td><td>重试一次；仍失败看是否刚上电</td></tr><tr><td>升级卡在握手</td><td>设备还在 APP 没进 boot</td><td>先发 <code>53 A2 04 00 FF 01 F9 01</code></td></tr><tr><td>升级后连不上</td><td>S 正在重启广播</td><td>等 2 s 再扫</td></tr><tr><td>下发后设备档位变了</td><td>这是<strong>设计行为</strong>：提交成功自动切第 5 档</td><td>不需要额外处理</td></tr></tbody></table>
+<hr>
+<h2>附：最小可用实现（如果只有一天）</h2>
+<ol><li>扫描 + 连接 + 订阅（1.2）</li><li>帧解析（两种帧头 + 拼包 + 校验）</li><li><code>0x0A</code> 读版本、<code>0x20</code> 读板卡描述</li><li>订阅 <code>0x07</code>/<code>0x0A</code> 显示距离与推荐杆</li><li>杆包：<code>0x0D</code>×3 + <code>0x0E[1]</code> + <code>0x0F</code> 轮询 + 比对 CRC</li></ol>
+<p>升级功能可以第二阶段再做。</p></div></body></html>

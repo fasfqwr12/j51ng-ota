@@ -222,12 +222,13 @@
     }
 
     /* tab 切换 */
-    const panes = { ota: $("pane-ota"), board: $("pane-board"), rod: $("pane-rod") };
+    const panes = { ota: $("pane-ota"), board: $("pane-board"), rod: $("pane-rod"), docs: $("pane-docs") };
     const dock = document.querySelector(".dock");   /* 底部升级操作栏只在「升级」页出现 */
     document.querySelectorAll(".tab").forEach((btn) => {
       btn.addEventListener("click", () => {
         const want = btn.dataset.tab;
         document.querySelectorAll(".tab").forEach((b) => b.classList.toggle("on", b === btn));
+      window.scrollTo(0, 0);          /* 换页回到顶部，别停在上一页的滚动位置 */
         Object.entries(panes).forEach(([k, el]) => { if (el) el.hidden = k !== want; });
         if (dock) dock.hidden = want !== "ota";
       });
