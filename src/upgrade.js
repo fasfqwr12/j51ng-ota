@@ -203,6 +203,7 @@
     const btn = $("up2Scan");
     if (btn) { btn.disabled = true; btn.classList.add("scanning"); btn.textContent = "扫描中…"; }
     try { await scanOnce(); }
+    catch (e) { setTail(`扫描失败：${e.message}`); render(); }
     finally {
       scanning = false;
       if (btn) { btn.disabled = false; btn.classList.remove("scanning"); btn.textContent = "扫描设备"; }
@@ -226,7 +227,7 @@
     /* 扫描本身偶尔漏板（主控那条总线有时抢不到），连扫两轮取并集；
      * 单轮丢应答也不再用一次超时判死刑。 */
     let head = await ask(0x24, [], 0x25, 2500, 1);
-    if (!head) { setTail("扫描超时（蓝牙板无应答）"); render(); return; }
+    if (!head) { setTail("扫描超时（未收到板卡清单 0x25）"); render(); return; }
 
     /* BLE 地址在固件里是小端存的，显示时反过来才和手机/系统里看到的一致 */
     devId = Array.from(head.slice(2, 8)).reverse()
@@ -386,6 +387,7 @@
     }
     const idEl = $("up2Dev");
     if (idEl) idEl.textContent = devId || "—";
+    renderFwCompare();
   }
 
   function setTail(t) { const e = $("up2Tail"); if (e) e.textContent = t; }
@@ -476,18 +478,16 @@
     const curEl = $("fwCur"), selEl = $("fwSel"), vd = $("fwVerdict");
     if (!curEl || !selEl) return;
     /* 内容没变就一个字都不写，避免每秒重建 DOM 拖慢升级进度条 */
+    const t = curTarget();
+    const b = boards.find((x) => x.id === idOfTarget(t));
     const sigNow = [
-      curTarget(),
-      (document.querySelector("#seg button.on") || {}).dataset ? 1 : 0,
-      (boards.find((x) => x.id === idOfTarget(curTarget())) || {}).crc || 0,
+      t, b?.missing, b?.stage, b?.model, b?.fw, b?.crc, b?.size,
       (window.__j5aa && window.__j5aa.payloadCrc) || 0,
       ($("kMeta") && $("kMeta").textContent) || "",
       ($("kFile") && $("kFile").textContent) || "",
     ].join("|");
     if (sigNow === _fwSig) return;
     _fwSig = sigNow;
-    const t = curTarget();
-    const b = boards.find((x) => x.id === idOfTarget(t));
     const m = fileMetaFromDom();
     const fname = ($("kFile") && $("kFile").textContent) || "";
 

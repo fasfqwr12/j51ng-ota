@@ -267,7 +267,10 @@ function gatt(timeoutMs, force){
           if(f.type!==0x0302 && f.type!==0x0303 && f.type!==0x0301 && f.type!==0x0000) logRx(f.type, f.payload);
           frames.push({t:f.type, p:f.payload});
         }else if(f.kind==="app"){
-          __metaQ.push({cmd:f.cmd, p:f.payload});
+          if(f.cmd===0x25 || f.cmd===0xFE) __metaQ.push({cmd:f.cmd, p:f.payload});
+          for(const cb of appSubs){
+            try{ cb(f.cmd, f.payload); }catch(_){}
+          }
         }else if(f.kind==="junk"){
           appendDevLog(f.byte);
         }else if(f.kind==="error"){
@@ -1681,49 +1684,31 @@ window.ota = {
  * 为什么不直接把 window.ota 给它：board 只需要"发一帧 53A2 + 收 54A1"，
  * 不该碰到升级流程的任何状态。
  * ============================================================ */
-(() => {
-  const appSubs = [];      /* 订阅 54A1 的回调 */
+const appSubs = [];      /* 应用帧订阅，与读 ID / 镜像头的等待队列独立 */
 
-  window.__J51NG = {
-    /** 当前是否已连上（有可写的特征值） */
-    connected(){ return !!(server && chW); },
+window.__J51NG = {
+  /** 当前是否已连上（有可写的特征值） */
+  connected(){ return !!(server && chW); },
 
-    /** 发一帧 53A2。cmd=命令码，body=完整帧字节（含 cmd），也接受 {cmd,data} */
-    async send(cmd, body){
-      if(!(server && chW)) throw new Error("未连接设备");
-      const f = body instanceof Uint8Array ? body : appFrame(cmd, null);
-      if(chW.writeValueWithoutResponse) await chW.writeValueWithoutResponse(f);
-      else await chW.writeValue(f);
-    },
+  /** 发一帧 53A2。body 可传完整帧，省略时按 cmd 生成无载荷帧。 */
+  async send(cmd, body){
+    if(!(server && chW)) throw new Error("未连接设备");
+    const f = body instanceof Uint8Array ? body : appFrame(cmd, null);
+    if(chW.writeValueWithoutResponse) await chW.writeValueWithoutResponse(f);
+    else await chW.writeValue(f);
+  },
 
-    /** 订阅 54A1 帧：cb(cmd, payload) */
-    onApp(cb){
-      if(typeof cb === "function" && !appSubs.includes(cb)) appSubs.push(cb);
-    },
+  /** 订阅应用帧：cb(cmd, payload) */
+  onApp(cb){
+    if(typeof cb === "function" && !appSubs.includes(cb)) appSubs.push(cb);
+  },
 
-    /** 取消订阅 */
-    offApp(cb){
-      const i = appSubs.indexOf(cb);
-      if(i >= 0) appSubs.splice(i,1);
-    },
+  /** 取消订阅 */
+  offApp(cb){
+    const i = appSubs.indexOf(cb);
+    if(i >= 0) appSubs.splice(i,1);
+  },
 
-    /** 供 board.js 手工拼帧用（与内部 appFrame 完全一致） */
-    frame: appFrame,
-  };
-
-  /* 把解析器收到的 54A1 分发出去。
-   * 这里用"包一层 __metaQ"的方式而不是改解析回调，
-   * 保证升级流程原有的 __metaQ 消费逻辑完全不受影响。 */
-  const _origPush = __metaQ.push.bind(__metaQ);
-  __metaQ.push = function(...args){
-    const r = _origPush(...args);
-    for(const it of args){
-      if(it && typeof it.cmd === "number"){
-        for(const cb of appSubs){
-          try{ cb(it.cmd, it.p); }catch(_){}
-        }
-      }
-    }
-    return r;
-  };
-})();
+  /** 供 board.js 手工拼帧用（与内部 appFrame 完全一致） */
+  frame: appFrame,
+};

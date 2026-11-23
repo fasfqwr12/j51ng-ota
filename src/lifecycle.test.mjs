@@ -47,6 +47,8 @@ globalThis.fetch = async () => ({ ok:true, json:async()=>({items:[]}), arrayBuff
 function makeDevice(cfg = {}){
   const listeners = {};
   const log = cfg.log || {};
+  let notify;
+  const reply = (bytes) => notify({ target: { value: new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength) } });
   const dev = {
     name: cfg.name || "AIMTECH VHR",
     id: cfg.id || "dev-0001",
@@ -67,8 +69,8 @@ function makeDevice(cfg = {}){
               getPrimaryService: async () => ({
                 getCharacteristic: async () => ({
                   startNotifications: async () => {},
-                  addEventListener(){},
-                  writeValueWithoutResponse: async () => {},
+                  addEventListener(ev, fn){ if(ev === "characteristicvaluechanged") notify = fn; },
+                  writeValueWithoutResponse: async (bytes) => cfg.onWrite?.(bytes, reply),
                   writeValueWithResponse: async () => {}
                 })
               })
@@ -176,6 +178,70 @@ const sleep = ms => new Promise(r=>setTimeout(r, ms));
   I.setDevice(dev); I.reset();
   await Promise.all([I.gatt(2000), I.gatt(2000), I.gatt(2000)]);
   eq((log.connect || 0), 1, "concurrent gatt calls share one connection");
+}
+
+/* 用例 7：网页连接读 ID 后，应用回包仍须分发到板卡扫描与其他订阅者。 */
+{
+  node("btnDisc").onclick();
+  await sleep(10);
+  const {crc8} = await import("./rx_parse.mjs");
+  const index = {items:[
+    {target:"M", model:"N2SE_M", version:"v1.83", appCrc:"0xDB2742BD", imgType:0},
+    {target:"S", model:"N2SE_S", version:"v1.17", appCrc:"0x9727166D", imgType:0}
+  ]};
+  globalThis.location = {hostname:"fasfqwr12.github.io"};
+  globalThis.fetch = async (url) => ({ok:true, json:async()=>url.startsWith("./firmware/") ? index : {}});
+  globalThis.MutationObserver = class { observe(){} };
+  document.head = node("head");
+  document.querySelector = () => null;
+  await import("./upgrade.js");
+
+  const seen = [];
+  window.__J51NG.onApp(cmd => seen.push(cmd));
+  const {dev} = makeDevice({onWrite(f, reply){
+    const appReply = (cmd, payload) => {
+      const r = API.appFrame(cmd, Uint8Array.from(payload));
+      r[0]=0x54; r[1]=0xA1;   // 两种帧头字节和均为 0xF5
+      reply(r);
+    };
+    if(f[0] === 0xEB && f[1] === 0x90 && f[2] === 0x06 && f[3] === 0x10){
+      const r = new Uint8Array(39);
+      r.set([0xEB,0x90,0x06,0x12,0,32,0x4A,0x35,0x53,0x54,1,1]);
+      r[38]=crc8(r.subarray(2,38));
+      reply(r);
+      return;
+    }
+    if(f[0] !== 0x53 || f[1] !== 0xA2) return;
+    const id=f[5];
+    const item=index.items.find(x => x.target === (id === 1 ? "S" : "M"));
+    if(f[4] === 0x24) appReply(0x25,[1,1,6,5,4,3,2,1,2,0]);
+    if(f[4] === 0xFE) appReply(0xFE,[0]);
+    if(f[4] === 0x20){
+      const p = new Uint8Array(12), view = new DataView(p.buffer);
+      p.set([id,1,1,id === 1 ? 17 : 83]);
+      view.setUint32(4,id === 1 ? 0x9727166D : 0xDB2742BD,true);
+      view.setUint32(8,id === 1 ? 45496 : 96084,true);
+      appReply(0x21,p);
+    }
+    if(f[4] === 0x22){
+      const p = new Uint8Array(13);
+      p[0]=id; p.set(new TextEncoder().encode(item.model),1);
+      appReply(0x23,p);
+    }
+  }});
+  Object.defineProperty(globalThis,"navigator",{configurable:true,value:{bluetooth:{requestDevice:async()=>dev}}});
+  I.reset();
+  await node("btnConn").onclick();
+  eq(node("kId").textContent,"01:02:03:04:05:06","connect reads real id frame");
+  ok(seen.includes(0x25),"connect reply reaches app subscribers");
+  eq(await API.readMeta(),{none:true},"readMeta still consumes its own reply");
+  await node("up2Scan")._ev.click();
+  eq(node("up2Tail").textContent,"扫描完成：2 块板","scan button populates both boards");
+  eq(node("up2Dev").textContent,"01:02:03:04:05:06","scan shows id from 0x25");
+  ok(seen.includes(0x21) && seen.includes(0x23),"description and model reach app subscribers");
+  ok(node("fwCur").innerHTML.includes("v1.83"),"scan updates firmware comparison immediately");
+  ok(node("up2Table").innerHTML.split("已是最新").length === 3 && node("up2Go").disabled,
+    "matching online images disable one-click upgrade");
 }
 
 console.log(`\n${fail === 0 ? "PASS" : "FAIL"}: ${pass} passed, ${fail} failed`);
