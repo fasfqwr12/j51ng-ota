@@ -1,3 +1,6 @@
+import { ECHO_READ, ECHO_DATA, createEchoReader } from "./echo_replay.mjs";
+import { bindEchoPanel } from "./echo_panel.mjs";
+
 /* ============================================================
  * board.js —— 「测距板」tab：实时监控 + 下发
  *
@@ -112,6 +115,7 @@
   /* ---------- 收到一帧 54A1 ---------- */
   function onFrame(cmd, payload) {
     const u8 = payload instanceof Uint8Array ? payload : new Uint8Array(payload);
+    if (cmd === ECHO_DATA) { echoReader.push(u8); return; }
     const le16 = () => (u8.length >= 2 ? (u8[0] | (u8[1] << 8)) : null);
 
     switch (cmd) {
@@ -170,15 +174,18 @@
 
   const cmdText = (cmd) => "0x" + cmd.toString(16).padStart(2, "0").toUpperCase();
 
-  async function apiSend(frame) {
-    const r = await fetch("/api/raw", { method: "POST", body: frame });
+  async function apiSend(frame, signal) {
+    const r = await fetch("/api/raw", { method: "POST", body: frame, signal });
     if (!r.ok) throw new Error("HTTP " + r.status + " " + (await r.text()).slice(0, 100));
   }
 
+  let pollPending = null, echoWriting = false;
   async function pollApiRx() {
-    if (!API_MODE) return;
+    if (!API_MODE || pollPending || echoWriting) return;
+    let done;
+    pollPending = new Promise(resolve => { done = resolve; });
     try {
-      const r = await fetch("/api/rx?since=" + apiRxSince, { cache: "no-store" });
+      const r = await fetch("/api/rx?since=" + apiRxSince, { cache: "no-store", signal: AbortSignal.timeout(1000) });
       if (!r.ok) return;
       const j = await r.json();
       if (typeof j.next === "number") apiRxSince = j.next;
@@ -188,6 +195,7 @@
         onFrame(bytes[0], bytes.slice(1));
       }
     } catch (_) { /* 后端忙或未启动：静默重试 */ }
+    finally { pollPending = null; done(); }
   }
 
   function send(cmd, data) {
@@ -210,9 +218,19 @@
     return false;
   }
 
+  const echoReader = createEchoReader(async (payload) => {
+    const api = window.__J51NG, frame = buildFrame(ECHO_READ, payload);
+    if (api?.connected()) return api.send(ECHO_READ, frame);
+    if (!API_MODE) throw new Error("未连接设备，请先连接蓝牙。");
+    echoWriting = true;
+    try { await pollPending; await apiSend(frame, AbortSignal.timeout(1700)); }
+    finally { echoWriting = false; }
+  });
+
   /* ---------- 初始化 ---------- */
   function init() {
     logEl = $("bdLog");
+    bindEchoPanel(echoReader);
 
     /* 推荐杆下拉 */
     const sel = $("bdClubSel");

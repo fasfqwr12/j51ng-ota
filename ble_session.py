@@ -96,10 +96,17 @@ class NativeBleSession:
         while i + 7 <= len(buf):
             if buf[i] == 0x54 and buf[i + 1] == 0xA1:
                 n = buf[i + 2] | (buf[i + 3] << 8)
+                if not 3 <= n <= 256:
+                    i += 1
+                    continue
                 total = n + 4
                 if i + total > len(buf):
                     break
-                self._frames.append(bytes(buf[i + 4:i + n + 2]).hex())
+                end = i + total
+                if (sum(buf[i:end - 2]) & 0xFFFF) != int.from_bytes(buf[end - 2:end], "little"):
+                    i += 1
+                    continue
+                self._frames.append(bytes(buf[i + 4:end - 2]).hex())
                 i += total
             else:
                 i += 1

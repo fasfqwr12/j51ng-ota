@@ -8,7 +8,7 @@
 <link rel="manifest" href="./manifest.webmanifest">
 <link rel="icon" type="image/svg+xml" href="./assets/icon.svg">
 <link rel="apple-touch-icon" href="./assets/icon-192.png">
-<link rel="stylesheet" href="./src/app.css?v=49">
+<link rel="stylesheet" href="./src/app.css?v=50">
 </head>
 <body>
 
@@ -197,7 +197,25 @@
   </div>
 
   <div class="card">
-    <div class="sec"><span class="n">C</span><h2>原始帧</h2>
+    <div class="sec"><span class="n">C</span><h2>回波记录</h2></div>
+    <div class="hint">按住 SHOT 扫一轮，松手后读取最后 2 秒（最多 41 帧）；读完前不要开始下一轮。</div>
+    <div class="row echo-actions">
+      <button class="primary" id="bdEchoRead">读取最近一轮</button>
+      <button id="bdEchoCsv" disabled>导出 CSV</button>
+      <label>看 <select id="bdEchoField" aria-label="回波图表指标">
+        <option value="cm">距离 (m)</option><option value="snr">SNR 原始码</option><option value="engy">Engy 原始码</option>
+      </select></label>
+    </div>
+    <p class="meta" id="bdEchoStatus" role="status">尚未读取</p>
+    <div class="meta" id="bdEchoStats"></div>
+    <div id="bdEchoPlot"></div>
+    <div class="echo-table" id="bdEchoTable" hidden>
+      <table><thead><tr><th>帧</th><th>相对 ms</th><th>峰</th><th>距离 m</th><th>SNR</th><th>Engy</th><th>判定窗</th></tr></thead><tbody id="bdEchoRows"></tbody></table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="sec"><span class="n">D</span><h2>原始帧</h2>
       <span class="tail"><button id="bdClr" style="padding:4px 9px;font-size:11.5px">清空</button></span></div>
     <div class="bdlog" id="bdLog"></div>
   </div>
@@ -269,7 +287,7 @@
     </div>
 
     <script type="module" src="./src/app.js?v=84"></script>
-<script type="module" src="./src/board.js?v=5"></script>
+<script type="module" src="./src/board.js?v=6"></script>
 <script type="module" src="./src/rod.js?v=2"></script>
 <script type="module" src="./src/upgrade.js?v=13"></script>
 <script src="./api-live.js?v=4"></script>
