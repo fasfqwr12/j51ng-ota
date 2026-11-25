@@ -1,4 +1,4 @@
-import { echoCsv } from "./echo_replay.mjs";
+import { echoCsv, echoStages, echoStageName, echoStopName } from "./echo_replay.mjs";
 
 /* 测距板既有布局不动；状态、散点和表格都来自一次完整快照。 */
 export function bindEchoPanel(reader) {
@@ -28,6 +28,11 @@ export function bindEchoPanel(reader) {
     }).join("");
     $("Plot").innerHTML = `<svg viewBox="0 0 640 150" role="img" aria-label="逐帧回波散点图"><g fill="currentColor" font-size="12">${grid}${dots}<text x="59" y="138">0 ms</text>${last ? `<text x="596" y="138" text-anchor="end">${last} ms</text>` : ""}</g></svg>`;
   }
+  function diagCells(d) {
+    if (!d) return "<td>—</td>".repeat(4);
+    const scope = d.rangeCase ? `档 ${d.rangeCase} · ` : "";
+    return `<td>${d.scanMs === 1023 ? "≥1023" : d.scanMs}</td><td>${echoStages(d.stages)}</td><td>${echoStageName(d.source)}</td><td>${scope}${echoStopName(d.stop)}</td>`;
+  }
   function render() {
     const frames = trace?.frames || [], all = frames.flatMap(f => f.peaks);
     const range = (key, div = 1) => {
@@ -35,10 +40,20 @@ export function bindEchoPanel(reader) {
       const v = all.map(p => p[key] / div), digits = div === 1 ? 0 : 2;
       return `${Math.min(...v).toFixed(digits)}–${Math.max(...v).toFixed(digits)}`;
     };
+    const rules = trace?.rules;
+    $("Rules").hidden = !rules;
+    $("RulesText").textContent = rules ?
+      `1 近探：距离 < ${rules.nearCm / 100} m 且 Engy > ${rules.nearEngy} → 2 近距细扫。` +
+      `3 预扫：峰数门槛 ≥ ${rules.pilotPeaks}；长按到预扫预算即进主扫。` +
+      `4 主扫：多峰（≥ ${rules.pilotPeaks}）或首峰 SNR > ${rules.strongSnr}；` +
+      `逐峰 SNR 在 ${rules.splitM} m 内（不含）≥ ${rules.snrNear}、其余 ≥ ${rules.snrFar}，` +
+      `且累计 ≥ ${rules.minShots} 脉冲；否则扫到脉冲预算。长按预算参数 ${rules.sweepMs} ms，不是实测用时。` +
+      `主扫选档（TOF 原码）：1 <2000；2 <16000 或 TOF≤32000 且 SNR≥150；3 其余 <32000；` +
+      `4 有峰的剩余档；5 预扫无峰。5 复扫／6 增强：长按关闭，短按仍按原规则（增强距离门槛 ${rules.enhanceM} m）。` : "";
     $("Table").hidden = !frames.length;
     csv.disabled = !frames.length;
     $("Stats").textContent = frames.length ? `${frames.length} 帧 · ${frames.filter(f=>!f.peaks.length).length} 空帧 · ${all.length} 峰｜距离 ${range("cm", 100)} m · SNR ${range("snr")} · Engy ${range("engy")}` : "";
-    $("Rows").innerHTML = frames.map(f => (f.peaks.length ? f.peaks : [null]).map((p, i) => `<tr><td>${f.index+1}</td><td>${f.timeMs}</td><td>${p ? i+1 : "空"}</td><td>${p ? meters(p) : "—"}</td><td>${p?.snr ?? "—"}</td><td>${p?.engy ?? "—"}</td><td>${f.windowMs ? f.windowMs + " ms" : "—"}</td></tr>`).join("")).join("");
+    $("Rows").innerHTML = frames.map(f => (f.peaks.length ? f.peaks : [null]).map((p, i) => `<tr><td>${f.index+1}</td><td>${f.timeMs}</td><td>${p ? i+1 : "空"}</td><td>${p ? meters(p) : "—"}</td><td>${p?.snr ?? "—"}</td><td>${p?.engy ?? "—"}</td><td>${f.windowMs ? f.windowMs + " ms" : "—"}</td>${diagCells(f.diag)}</tr>`).join("")).join("");
     plot();
   }
   field.addEventListener("change", plot);
@@ -59,7 +74,7 @@ export function bindEchoPanel(reader) {
     try {
       trace = await reader.read((n, count) => { status.textContent = `读取 ${n}/${count} 帧…`; });
       status.textContent = trace.frames.length
-        ? `读取完成 · 快照 ${trace.generation} · 三色为帧内峰序，虚线为锁定，底部灰点为空帧`
+        ? `读取完成 · 快照 ${trace.generation} · 三色为帧内峰序，虚线为锁定，底部灰点为空帧${trace.rules ? "；表格右侧可看阶段与采测用时" : "；此固件未提供阶段诊断"}`
         : "没有连测记录，请按住 SHOT 扫一轮再松手。";
       render();
     } catch (e) { status.textContent = e.message; }

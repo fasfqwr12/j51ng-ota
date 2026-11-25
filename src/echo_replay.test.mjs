@@ -59,3 +59,20 @@ test("完整 41 帧可读，最老和最新恰好相隔 2 s", async () => {
   const t=await r.read();
   assert.equal(t.frames.length,41);assert.equal(t.frames.at(-1).timeMs,2000);
 });
+
+// 真实主控 C 页编码夹具：预扫胜出、最后一批无峰、三个同批回波和下一空帧。
+test("阶段诊断页仍只读一次/帧，完整保留三个峰和 16 位质量", async () => {
+  const pages = ["ecff000000020002000000e2032000c803e8138800fa006401f4006401f40200","ec000000000280c21800341086420038002c80c375001700121100008421ffff","ec010000000280c200c034500000000000008000000000000010000000000000"].map(x => Uint8Array.from(Buffer.from(x,"hex")));
+  const indexes = [];
+  const r = kit((req,push) => { indexes.push(req[2]); sendPage(req,push,pages[req[2] === META ? 0 : req[2] + 1]); });
+  const t = await r.read();
+  assert.deepEqual(indexes,[META,0,1,META]);
+  assert.deepEqual(t.rules,{nearCm:800,nearEngy:200,minShots:1000,strongSnr:5000,snrNear:250,snrFar:100,splitM:500,sweepMs:100,enhanceM:500,pilotPeaks:2});
+  assert.deepEqual(t.frames[0].diag,{stages:13,source:3,rangeCase:4,stop:3,scanMs:96});
+  assert.deepEqual(t.frames[0].peaks,[{cm:34370,snr:56,engy:44},{cm:50037,snr:23,engy:18},{cm:65536,snr:0x8421,engy:65535}]);
+  assert.equal(t.frames[1].timeMs,192);
+  assert.equal(t.frames[1].diag.scanMs,97);
+  assert.deepEqual(t.frames[1].peaks,[]);
+  assert.match(echoCsv(t),/343\.70,56,44,0,96,13,3,4,3/);
+  for (const line of echoCsv(t).trim().split(/\r?\n/)) assert.equal(line.split(",").length,13);
+});
